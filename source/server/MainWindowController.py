@@ -13,7 +13,7 @@ class MainWindowController(QObject):
         print(f"Data update from {client.socket}: {data}")
 
     def on_connection_start(self, client):
-        print(f"Connection {client.socket} started")
+        print(f"Connection event received")
 
     def on_connection_end(self, client):
-        print(f"Connection {client.socket} ended")
+        print(f"Disconnection event received")
