@@ -7,6 +7,8 @@ import sys
 import resources.qrc_resources
 from MainWindowController import MainWindowController
 from MainWindowModel import MainWindowModel
+import qtmodern.styles
+import qtmodern.windows
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -18,8 +20,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self._center_widget)
         self.setFixedSize(1000, 400)
         self.TopToolBar = QToolBar("Actions", self)
-        self.TopToolBar.addAction(QAction(QIcon(":openIcon"), "", self.TopToolBar))
-        self.TopToolBar.addAction(QAction(QIcon(":deleteIcon"), "", self.TopToolBar))
+        self.ToolBarOpenAction = QAction(QIcon(":openIcon"), "", self.TopToolBar)
+        self.ToolBarDeleteAction = QAction(QIcon(":deleteIcon"), "", self.TopToolBar)
+        self.TopToolBar.addAction(self.ToolBarOpenAction)
+        self.TopToolBar.addAction(self.ToolBarDeleteAction)
         self.addToolBar(self.TopToolBar)
         self.statusBar = self.statusBar()
         self.statusBar.showMessage(f"ThreadPool Usage: 0/{QThreadPool.globalInstance().maxThreadCount()} with max worker limit 12", 0)
@@ -34,9 +38,11 @@ class MainWindow(QMainWindow):
         # self.buttonLayout.addWidget(QPushButton("temp"))
         # self.layout.addWidget(self._buttonLayoutWidget)
 
-        self.ClientTable = QTableWidget(20, 4)
+        self.ClientTable = QTableWidget(0, 4)
+        self.ClientTable.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.ClientTable.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.layout.addWidget(self.ClientTable)
-        self.ClientTable.setHorizontalHeaderLabels(["Status", "Name", "Address", "Latency"])
+        self.ClientTable.setHorizontalHeaderLabels(["Status", "Address", "Country", "Name", "Latency"])
         h = self.ClientTable.horizontalHeader()
         h.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         h.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
@@ -59,11 +65,34 @@ class MainWindow(QMainWindow):
         subMenu.addAction("Generate Client Payload...")
         self.setMenuBar(self._menuBar)
 
+    # def setClientEntry(self, item, status, address, name="N/A", latency="N/A"):
+    #     row = item.row()
+    #     self.ClientTable.setItem(row, 0, QTableWidgetItem(status))
+    #     self.ClientTable.setItem(row, 1, QTableWidgetItem(address))
+    #     self.ClientTable.setItem(row, 2, QTableWidgetItem(name))
+    #     self.ClientTable.setItem(row, 3, QTableWidgetItem(latency))
+    #     return self.ClientTable.itemAt(row, 0)
+    #
+    # def addClientEntry(self, status, address, name="N/A", latency="N/A"):
+    #     rowCount = self.ClientTable.rowCount()
+    #     self.ClientTable.insertRow(rowCount)
+    #     c = rowCount #temp im lazy you can remove this
+    #     self.ClientTable.setItem(rowCount, 0, QTableWidgetItem(status))
+    #     self.ClientTable.setItem(rowCount, 1, QTableWidgetItem(address))
+    #     self.ClientTable.setItem(rowCount, 2, QTableWidgetItem(name))
+    #     self.ClientTable.setItem(rowCount, 3, QTableWidgetItem(latency))
+    #     return self.ClientTable.itemAt(c, 0)
+    #
+    # def removeClientEntry(self, item):
+    #     row = item.row()
+    #     self.ClientTable.removeRow(row)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = MainWindow()
+    qtmodern.styles.dark(app)
+    mw = qtmodern.windows.ModernWindow(window)
     controller = MainWindowController(window)
     model = MainWindowModel(controller)
-    window.show()
+    mw.show()
     sys.exit(app.exec_())

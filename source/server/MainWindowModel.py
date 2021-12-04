@@ -1,32 +1,65 @@
+import os
+import sys
+import typing
+import re
+import json
+from urllib.request import urlopen
+sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
+from NetProtocol import *
 import threading
 import socket
 import select
 import uuid
 import queue
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QRunnable, QThreadPool
-from NetProtocol import *
 import functools
 import orjson
 from time import sleep
 from NetData import *
 import logging
+import SocketLock
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+
 
 clients = {}
 
+# logger = logging.getLogger()
+# logger.setLevel(logging.DEBUG)
+# logger.setFormatter(logging.Formatter(bcolors.WARNING + '%[(asctime)s] - [%(threadName)s] - [%(levelname)s]:' + bcolors.OKGREEN + '    %(message)s'))
+logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(levelname)s:' + bcolors.OKGREEN + '    %(message)s' + bcolors.END, level=logging.DEBUG)
+
+
 class Client(QObject):
+    dataLock = SocketLock.SocketLock()
     _message_queue = queue.Queue()
     # Data segements
     # ---------------
     connectionData = None
     systemInformation = None
     systemMetrics = None
+    geoInformation = None
 
     # Signals
     # ---------------
-    data_update = pyqtSignal()
-    connection_start = pyqtSignal()
-    connection_end = pyqtSignal()
+    sSystemInformation_update = pyqtSignal()
+    sSystemMetrics_update = pyqtSignal()
+    sConnection_start = pyqtSignal()
+    sConnection_end = pyqtSignal()
     #client_id : str
+
+    def __str__(self):
+        return f"{self.address}"
 
     def __init__(self, socket, address):
         super().__init__()
@@ -55,7 +88,7 @@ class Client(QObject):
     #     return wrapper
 
     def send_message(self, data : NetMessage):
-        print(f"sending {data}")
+        logging.debug(f"Sending message {data}")
         self._message_queue.put(NetProtocol.packNetMessage(data))
 
 # class GetSystemInfo(QRunnable):
@@ -88,11 +121,55 @@ class MessageHandler(QRunnable):
     def __init__(self, client: Client, message: bytes):
         super().__init__()
         self.client = client
-        self.message = orjson.loads(message)
-        print("messagehandler init", threading.current_thread())
+        self._message_bytes = message
+        self.message = None
+        logging.debug(f"Started MessageHandler with message from client {self.client.address}")
 
     def run(self) -> None:
-        pass
+        self.message = orjson.loads(self._message_bytes)
+        logging.debug(f"MessageHandler running with message {self.message} from client {self.client.address}")
+        if self.message["type"] == NetTypes.NetRequest:
+            pass
+        elif self.message["type"] == NetTypes.NetSystemInformation.value: #if a message is
+            data = self.message["data"]
+            dataStructure = NetSystemInformation(**data)
+
+            self.client.dataLock.acquire_write()
+            self.client.systemInformation = dataStructure
+            self.client.dataLock.release_write()
+
+            self.client.sSystemInformation_update.emit()
+        elif self.message["type"] == NetTypes.NetSystemMetrics.value: #if a message is
+            data = self.message["data"]
+            dataStructure = NetSystemMetrics(**data)
+            self.client.dataLock.acquire_write()
+            self.client.systemMetrics = dataStructure
+            self.client.dataLock.release_write()
+            self.client.sSystemMetrics_update.emit()
+
+class ClientConnectionHandler(QRunnable):
+    def __init__(self, client: Client):
+        super().__init__()
+        self.client = client
+
+    def run(self) -> None:
+        logging.debug(f"ClientConnectionHandler running with client {self.client.address}")
+        if self.client.address[0] != "127.0.0.1":
+            response = urlopen(f"http://ipinfo.io/{self.client.address[0]}/json")
+        else:
+            response = urlopen("http://ipinfo.io/json")
+        data = json.load(response)
+        IP = data['ip']
+        org = data['org']
+        city = data['city']
+        country = data['country']
+        region = data['region']
+
+        self.client.dataLock.acquire_write()
+        self.client.geoInformation = NetGeoInfo(country, city, IP)
+        self.client.dataLock.release_write()
+
+        self.client.sConnection_start.emit() #emit signal to update UI
 
 
 class ListenerWorker(QObject):
@@ -105,12 +182,18 @@ class ListenerWorker(QObject):
         super().__init__()
         self.controller = controller
 
+    def connectSignals(self, connection : socket):
+        clients[connection].sSystemInformation_update.connect(functools.partial(self.controller.on_SystemInformation_update, clients[connection]))
+        clients[connection].sSystemMetrics_update.connect(functools.partial(self.controller.on_SystemMetrics_update, clients[connection]))
+        clients[connection].sConnection_end.connect(functools.partial(self.controller.on_Connection_end, clients[connection]))
+        clients[connection].sConnection_start.connect(functools.partial(self.controller.on_Connection_start, clients[connection]))
 
-    def echo(self):
+    def CommandLineEcho(self):
         while True:
             inp = input("")
             for client in clients.values():
-                client.send_message(NetMessage("request", inp))
+                if (inp == "information"):
+                    client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetSystemInformation))
 
     def run(self):
         #model
@@ -122,7 +205,7 @@ class ListenerWorker(QObject):
         self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener_socket.bind(('0.0.0.0', 4959))
         self.listener_socket.listen(5)
-        thread = threading.Thread(target=self.echo)
+        thread = threading.Thread(target=self.CommandLineEcho)
         thread.start()
 
         while True:
@@ -130,39 +213,40 @@ class ListenerWorker(QObject):
             for s in readable:
                 if s is self.listener_socket:
                     connection, client_address = s.accept()
-                    logging.info(f"Socket connected")
                     self.sockets.append(connection)
                     # self.message_queues[connection] = queue.Queue()
                     clients[connection] = Client(connection, client_address)
-                    clients[connection].data_update.connect(functools.partial(self.controller.on_data_update, clients[connection]))
-                    clients[connection].connection_start.connect(functools.partial(self.controller.on_connection_start, clients[connection]))
-                    clients[connection].connection_end.connect(functools.partial(self.controller.on_connection_end, clients[connection]))
-                    clients[connection].connection_start.emit()
+                    self.connectSignals(connection) #connect signals from the client to the controller
+                    logging.debug(f"{clients[connection].address} connected")
+                    threadPool.start(ClientConnectionHandler(clients[connection]))
                 else:
                     size, message = NetProtocol.unpackFromSocket(s)
                     if size == -1:
-                        logging.info(f"Socket disconnected")
-                        clients[s].connection_end.emit()
+                        logging.debug(f"{clients[s].address} disconnected")
                         self.sockets.remove(s)
-                        clients.pop(s)
+                        cl = clients.pop(s)
                         s.close()
+                        cl.sConnection_end.emit()
                     elif size != 0:
-                        threadPool.start(MessageHandler(self.clients[s], message))
+                        logging.debug(f"Listener thread got message from {clients[s].address}")
+                        threadPool.start(MessageHandler(clients[s], message))
 
             for s in writable:
                 if not s._closed and not clients[s]._message_queue.empty():
                     message = clients[s]._message_queue.get_nowait()
                     if(type(message) is bytes):
+                        logging.debug(f"Listener thread sending message to {clients[s].address}....")
                         s.send(message)
-                        print(f"confirmed sent {message}")
                     else:
-                        logging.error(f"Received non-bytes message on message-queue of {s.address}")
-
+                        logging.error(f"Received non-bytes message on message-queue of {clients[s].address}")
+            #cycle delay
+            sleep(0.01)
 
 class MainWindowModel:
     def __init__(self, controller):
         #open communicator thread and listen
         self.communicator = QThread()
+        self.communicator.setObjectName("Communicator Thread")
         print(threading.current_thread())
         self.worker = ListenerWorker(controller)
         self.worker.moveToThread(self.communicator)

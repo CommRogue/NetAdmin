@@ -2,19 +2,38 @@ import dataclasses
 import orjson
 import typing
 import struct
+from enum import Enum
+
+class NetTypes(Enum):
+    NetRequest = 0
+    NetSystemInformation = 1
+    NetSystemMetrics = 2
+
+class NetDataStructure:
+    pass
 
 @dataclasses.dataclass
 class NetMessage:
-    type : str
-    data : str
+    type : int
+    data : typing.Union[NetDataStructure, int]
 
 @dataclasses.dataclass
-class NetRequest(NetMessage):
-    pass
+class NetGeoInfo:
+    COUNTRY : str
+    CITY : str
+    REAL_IP : str
 
 @dataclasses.dataclass
-class NetResponse(NetMessage):
-    pass
+class NetSystemInformation(NetDataStructure):
+    DESKTOP_NAME : str
+    OPERATING_SYSTEM_VERSION : str
+    PROCESSOR_NAME : str
+    PROCESSOR_ARCHITECTURE : str
+    GPU_NAME : str
+
+@dataclasses.dataclass
+class NetSystemMetrics(NetDataStructure):
+    CPU_LOAD : float
 
 class NetProtocol:
     @staticmethod
