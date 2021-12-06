@@ -18,6 +18,8 @@ from time import sleep
 from NetData import *
 import logging
 import SocketLock
+from PyQt5.QtSql import QSqlDatabase, QSqlQuery, QSqlError, QSqlQueryModel
+import uuid
 
 class bcolors:
     HEADER = '\033[95m'
@@ -41,6 +43,9 @@ logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(l
 
 
 class Client(QObject):
+    #synchronization objects
+    uuid = None
+    identificationNotification = threading.Condition()
     dataLock = SocketLock.SocketLock()
     _message_queue = queue.Queue()
     # Data segements
@@ -123,13 +128,24 @@ class MessageHandler(QRunnable):
         self.client = client
         self._message_bytes = message
         self.message = None
-        logging.debug(f"Started MessageHandler with message from client {self.client.address}")
 
     def run(self) -> None:
         self.message = orjson.loads(self._message_bytes)
         logging.debug(f"MessageHandler running with message {self.message} from client {self.client.address}")
         if self.message["type"] == NetTypes.NetRequest:
             pass
+        elif self.message["type"] == NetTypes.NetIdentification.value: #check if client sent ID or else send ID
+            if self.message['data']["id"] != "": #also check if id in database
+                self.client.uuid = self.message['data']["id"]
+                logging.debug(f"Client {self.client.address} identified as {self.client.uuid}")
+                self.client.identificationNotification.acquire()
+                self.client.identificationNotification.notify_all()
+                self.client.identificationNotification.release()
+            else: #if no id sent
+                cid = str(uuid.uuid4())
+                logging.info(f"Client {self.client.address} sent identification request. Generating new ID {cid} and sending...")
+                self.client.send_message(NetMessage(NetTypes.NetIdentification, NetIdentification(cid))) #send a client id
+                self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification)) #request to identify again
         elif self.message["type"] == NetTypes.NetSystemInformation.value: #if a message is
             data = self.message["data"]
             dataStructure = NetSystemInformation(**data)
@@ -154,6 +170,34 @@ class ClientConnectionHandler(QRunnable):
 
     def run(self) -> None:
         logging.debug(f"ClientConnectionHandler running with client {self.client.address}")
+        self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification))
+        self.client.identificationNotification.acquire()
+        result = self.client.identificationNotification.wait(10)
+        if result:
+            self.client.identificationNotification.release()
+        else:
+            raise Exception("Client identification timed out")
+
+
+        #add client to database
+        con = QSqlDatabase.addDatabase("QSQLITE")
+        con.setDatabaseName(os.getenv("LOCALAPPDATA")+"\\NetAdmin\\clients.db")
+        if not con.open():
+            print("Failed to open database")
+            sys.exit(1)
+        findClients = QSqlQuery()
+        findClients.exec_("SELECT uuid, address FROM clients WHERE uuid = '" + self.client.uuid + "'")
+        if findClients.next():
+            logging.debug(f"Client {self.client.uuid} already in database")
+        else:
+            logging.debug(f"Client {self.client.uuid} not in database. Adding to database....")
+            addClient = QSqlQuery()
+            addClient.prepare(f"INSERT INTO clients (uuid, address) VALUES (?, ?)")
+            addClient.addBindValue(str(self.client.uuid))
+            addClient.addBindValue(str(self.client.address[0]))
+            addClient.exec_()
+        con.close()
+
         if self.client.address[0] != "127.0.0.1":
             response = urlopen(f"http://ipinfo.io/{self.client.address[0]}/json")
         else:
@@ -168,7 +212,6 @@ class ClientConnectionHandler(QRunnable):
         self.client.dataLock.acquire_write()
         self.client.geoInformation = NetGeoInfo(country, city, IP)
         self.client.dataLock.release_write()
-
         self.client.sConnection_start.emit() #emit signal to update UI
 
 
@@ -203,7 +246,7 @@ class ListenerWorker(QObject):
 
         threadPool = QThreadPool.globalInstance()
         self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listener_socket.bind(('0.0.0.0', 4959))
+        self.listener_socket.bind(('0.0.0.0', 49152))
         self.listener_socket.listen(5)
         thread = threading.Thread(target=self.CommandLineEcho)
         thread.start()
@@ -228,21 +271,19 @@ class ListenerWorker(QObject):
                         s.close()
                         cl.sConnection_end.emit()
                     elif size != 0:
-                        logging.debug(f"Listener thread got message from {clients[s].address}")
                         threadPool.start(MessageHandler(clients[s], message))
 
             for s in writable:
                 if not s._closed and not clients[s]._message_queue.empty():
                     message = clients[s]._message_queue.get_nowait()
                     if(type(message) is bytes):
-                        logging.debug(f"Listener thread sending message to {clients[s].address}....")
                         s.send(message)
                     else:
                         logging.error(f"Received non-bytes message on message-queue of {clients[s].address}")
             #cycle delay
             sleep(0.01)
 
-class MainWindowModel:
+class MainWindowModel: #fix main window closing and not client inspection windows
     def __init__(self, controller):
         #open communicator thread and listen
         self.communicator = QThread()

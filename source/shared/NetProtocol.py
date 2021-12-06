@@ -8,6 +8,7 @@ class NetTypes(Enum):
     NetRequest = 0
     NetSystemInformation = 1
     NetSystemMetrics = 2
+    NetIdentification = 3
 
 class NetDataStructure:
     pass
@@ -16,6 +17,10 @@ class NetDataStructure:
 class NetMessage:
     type : int
     data : typing.Union[NetDataStructure, int]
+
+@dataclasses.dataclass
+class NetIdentification(NetDataStructure):
+    id : str
 
 @dataclasses.dataclass
 class NetGeoInfo:
@@ -34,6 +39,9 @@ class NetSystemInformation(NetDataStructure):
 @dataclasses.dataclass
 class NetSystemMetrics(NetDataStructure):
     CPU_LOAD : float
+    GPU_LOAD: float
+    RAM_LOAD : float
+    DISK_LOAD : float
 
 class NetProtocol:
     @staticmethod

@@ -1,12 +1,32 @@
 import sys
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QMainWindow
-
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import QCloseEvent
+from PyQt5.QtCore import pyqtSignal
 
 class ClientInspectorView(QMainWindow):
+    exitEvent = pyqtSignal(QCloseEvent)
+
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        self.addToTable()
+
+    def closeEvent(self, event):
+        self.exitEvent.emit(event)
+
+    def addToTable(self):
+        self.SystemInformationTable.insertRow(0)
+        self.SystemInformationTable.setItem(0, 0, QTableWidgetItem("DESKTOP_NAME"))
+        self.SystemInformationTable.insertRow(1)
+        self.SystemInformationTable.setItem(1, 0, QTableWidgetItem("OPERATING_SYSTEM_VERSION"))
+        self.SystemInformationTable.insertRow(2)
+        self.SystemInformationTable.setItem(2, 0, QTableWidgetItem("PROCESSOR_NAME"))
+        self.SystemInformationTable.insertRow(3)
+        self.SystemInformationTable.setItem(3, 0, QTableWidgetItem("PROCESSOR_ARCHITECTURE"))
+        self.SystemInformationTable.insertRow(4)
+        self.SystemInformationTable.setItem(4, 0, QTableWidgetItem("GPU_NAME"))
+
 
     def setupUi(self, ClientInspectionWindow):
         ClientInspectionWindow.setObjectName("ClientInspectionWindow")
@@ -29,8 +49,14 @@ class ClientInspectorView(QMainWindow):
         self.horizontalLayout_2 = QtWidgets.QHBoxLayout(self.layoutWidget)
         self.horizontalLayout_2.setContentsMargins(0, 0, 0, 10)
         self.horizontalLayout_2.setObjectName("horizontalLayout_2")
-        self.SystemInformationTable = QtWidgets.QTableView(self.layoutWidget)
+        self.SystemInformationTable = QtWidgets.QTableWidget(0, 2, self.layoutWidget)
         self.SystemInformationTable.setObjectName("SystemInformationTable")
+        self.SystemInformationTable.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.SystemInformationTable.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.SystemInformationTable.setHorizontalHeaderLabels(["Specification", "Value"])
+        h = self.SystemInformationTable.horizontalHeader()
+        h.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        h.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
         self.horizontalLayout_2.addWidget(self.SystemInformationTable)
         self.verticalLayout_8 = QtWidgets.QVBoxLayout()
         self.verticalLayout_8.setObjectName("verticalLayout_8")
@@ -123,28 +149,28 @@ class ClientInspectorView(QMainWindow):
         self.verticalLayout_7 = QtWidgets.QVBoxLayout()
         self.verticalLayout_7.setContentsMargins(0, -1, 0, -1)
         self.verticalLayout_7.setObjectName("verticalLayout_7")
-        self.InternetUsageLabel = QtWidgets.QLabel(self.layoutWidget)
+        self.DiskUsageLabel = QtWidgets.QLabel(self.layoutWidget)
         font = QtGui.QFont()
         font.setPointSize(12)
         font.setBold(True)
         font.setWeight(75)
-        self.InternetUsageLabel.setFont(font)
-        self.InternetUsageLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.InternetUsageLabel.setObjectName("InternetUsageLabel")
-        self.verticalLayout_7.addWidget(self.InternetUsageLabel)
+        self.DiskUsageLabel.setFont(font)
+        self.DiskUsageLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.DiskUsageLabel.setObjectName("DiskUsageLabel")
+        self.verticalLayout_7.addWidget(self.DiskUsageLabel)
         self.horizontalLayout_8 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_8.setObjectName("horizontalLayout_8")
-        self.InternetUsageProgressBar = QtWidgets.QProgressBar(self.layoutWidget)
-        self.InternetUsageProgressBar.setProperty("value", 24)
-        self.InternetUsageProgressBar.setAlignment(QtCore.Qt.AlignCenter)
-        self.InternetUsageProgressBar.setOrientation(QtCore.Qt.Vertical)
-        self.InternetUsageProgressBar.setObjectName("InternetUsageProgressBar")
-        self.horizontalLayout_8.addWidget(self.InternetUsageProgressBar)
+        self.DiskUsageProgressBar = QtWidgets.QProgressBar(self.layoutWidget)
+        self.DiskUsageProgressBar.setProperty("value", 24)
+        self.DiskUsageProgressBar.setAlignment(QtCore.Qt.AlignCenter)
+        self.DiskUsageProgressBar.setOrientation(QtCore.Qt.Vertical)
+        self.DiskUsageProgressBar.setObjectName("DiskUsageProgressBar")
+        self.horizontalLayout_8.addWidget(self.DiskUsageProgressBar)
         self.verticalLayout_7.addLayout(self.horizontalLayout_8)
-        self.InternetUsagePrecentage = QtWidgets.QLabel(self.layoutWidget)
-        self.InternetUsagePrecentage.setAlignment(QtCore.Qt.AlignCenter)
-        self.InternetUsagePrecentage.setObjectName("InternetUsagePrecentage")
-        self.verticalLayout_7.addWidget(self.InternetUsagePrecentage)
+        self.DiskUsagePrecentage = QtWidgets.QLabel(self.layoutWidget)
+        self.DiskUsagePrecentage.setAlignment(QtCore.Qt.AlignCenter)
+        self.DiskUsagePrecentage.setObjectName("DiskUsagePrecentage")
+        self.verticalLayout_7.addWidget(self.DiskUsagePrecentage)
         self.horizontalLayout_10.addLayout(self.verticalLayout_7)
         self.verticalLayout_8.addLayout(self.horizontalLayout_10)
         self.horizontalLayout_2.addLayout(self.verticalLayout_8)
@@ -221,8 +247,8 @@ class ClientInspectorView(QMainWindow):
         self.GPUUsagePrecentage.setText(_translate("ClientInspectionWindow", "TextLabel"))
         self.RAMUsageLabel.setText(_translate("ClientInspectionWindow", "Ram Usage"))
         self.RamUsagePrecentage.setText(_translate("ClientInspectionWindow", "TextLabel"))
-        self.InternetUsageLabel.setText(_translate("ClientInspectionWindow", "Internet Usage"))
-        self.InternetUsagePrecentage.setText(_translate("ClientInspectionWindow", "TextLabel"))
+        self.DiskUsageLabel.setText(_translate("ClientInspectionWindow", "Disk Usage"))
+        self.DiskUsagePrecentage.setText(_translate("ClientInspectionWindow", "TextLabel"))
         self.ConnectionInformationHeader.setText(_translate("ClientInspectionWindow", "Connection Information"))
         self.label_8.setText(_translate("ClientInspectionWindow", "Latency"))
         self.label_10.setText(_translate("ClientInspectionWindow", "Address"))

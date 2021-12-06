@@ -1,10 +1,11 @@
 from PyQt5.QtWidgets import QTableWidgetItem, QTableWidget
 
 class UIClientEntry:
-    def __init__(self, client, status, address, country="N/A", name="N/A", latency="N/A"):
+    def __init__(self, client, status, address, identifier, country="N/A", name="N/A", latency="N/A"):
         self.client = client
         self._status_field = QTableWidgetItem(status)
         self._address_field = QTableWidgetItem(address)
+        self._uuid_field = QTableWidgetItem(identifier)
         self._country_field = QTableWidgetItem(country)
         self._name_field = QTableWidgetItem(name)
         self._latency_field = QTableWidgetItem(latency)
@@ -19,10 +20,15 @@ class UIClientEntry:
         self.table.setItem(rowCount, 2, self._country_field)
         self.table.setItem(rowCount, 3, self._name_field)
         self.table.setItem(rowCount, 4, self._latency_field)
+        self.table.setItem(rowCount, 5, self._uuid_field)
 
     def removeFromTable(self):
         if self.table is not None:
             self.table.removeRow(self.table.rowCount() - 1)
+
+    def setDisconnected(self):
+        self.client = None
+        self._status_field.setText("Disconnected")
 
     def setStatus(self, status):
         newStatus = QTableWidgetItem(status)
@@ -48,6 +54,11 @@ class UIClientEntry:
         newLatency = QTableWidgetItem(latency)
         self.table.setItem(self.table.rowCount() - 1, 4, newLatency)
         self._latency_field = newLatency
+
+    def setIdentifier(self, identifier):
+        newIdentifier = QTableWidgetItem(identifier)
+        self.table.setItem(self.table.rowCount() - 1, 5, newIdentifier)
+        self._uuid_field = newIdentifier
 
     def getStatus(self):
         return self._status_field.text()
