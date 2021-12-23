@@ -1,21 +1,18 @@
-import dataclasses
-import orjson
-import typing
-import struct
-import uuid
+import asyncio
 
-@dataclasses.dataclass
-class NetUser:
-    name : str
-    passw : str
+async def tcp_echo_client(message):
+    reader, writer = await asyncio.open_connection(
+        '127.0.0.1', 8888)
 
-@dataclasses.dataclass
-class NetMessage:
-    client_id : str
-    main_data : str
-    user : NetUser
+    print(f'Send: {message!r}')
+    writer.write(message.encode())
+    await writer.drain()
 
-res = orjson.dumps(NetMessage(client_id=str(uuid.uuid4()), main_data="dataa", user=NetUser("guy", "guy123")))
-res = orjson.loads(res)
-res = struct.pack(">I", len(res)) + res
-print(s)
+    data = await reader.read(100)
+    print(f'Received: {data.decode()!r}')
+
+    print('Close the connection')
+    writer.close()
+    await writer.wait_closed()
+
+asyncio.run(tcp_echo_client('eweqw'))

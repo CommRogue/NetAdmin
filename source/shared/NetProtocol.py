@@ -13,6 +13,18 @@ class NetTypes(Enum):
 class NetDataStructure:
     pass
 
+class NetDirectoryItem:
+    def __init__(self, name: str, path: str, item_type, icon = "None"):
+        self.name = name
+        self.path = path
+        self.itemtype = item_type
+        self.icon = None
+
+@dataclasses.dataclass
+class NetDirectoryListing(NetDataStructure):
+    directory: str
+    items : typing.List[NetDirectoryItem]
+
 @dataclasses.dataclass
 class NetMessage:
     type : int

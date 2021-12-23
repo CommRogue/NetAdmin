@@ -1,4 +1,3 @@
-import threading
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QRunnable, QThreadPool, pyqtSlot
 from MainWindowModel import Client
 from NetProtocol import *

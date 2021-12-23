@@ -15,7 +15,6 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal, QRunnable, QThreadPool
 import functools
 import orjson
 from time import sleep
-from NetData import *
 import logging
 import SocketLock
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery, QSqlError, QSqlQueryModel
@@ -48,7 +47,7 @@ class Client(QObject):
     identificationNotification = threading.Condition()
     dataLock = SocketLock.SocketLock()
     _message_queue = queue.Queue()
-    # Data segements
+    # Data segments
     # ---------------
     connectionData = None
     systemInformation = None
