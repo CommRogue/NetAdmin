@@ -35,8 +35,12 @@ def instantiateDb(path):
     con.close()
     return returnValue
 
+def except_hook(cls, exception, traceback):
+    sys.__excepthook__(cls, exception, traceback)
 
 def main():
+    import sys
+    sys.excepthook = except_hook
     app = QApplication(sys.argv)
     databaseClients, config = setupAppData()
     window = MainWindow()
@@ -45,6 +49,9 @@ def main():
     controller = MainWindowController(window, databaseClients)
     model = MainWindowModel(controller)
     mw.show()
-    sys.exit(app.exec_())
+    try:
+        sys.exit(app.exec_())
+    except:
+        print(e)
 
 main()

@@ -19,6 +19,7 @@ import logging
 import SocketLock
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery, QSqlError, QSqlQueryModel
 import uuid
+import UniqueID
 
 class bcolors:
     HEADER = '\033[95m'
@@ -32,6 +33,8 @@ class bcolors:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
+UniqueIDInstance = UniqueID.UniqueIDInstance()
+response_events = {} #conditions
 
 clients = {}
 
@@ -40,6 +43,19 @@ clients = {}
 # logger.setFormatter(logging.Formatter(bcolors.WARNING + '%[(asctime)s] - [%(threadName)s] - [%(levelname)s]:' + bcolors.OKGREEN + '    %(message)s'))
 logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(levelname)s:' + bcolors.OKGREEN + '    %(message)s' + bcolors.END, level=logging.DEBUG)
 
+class DataEvent(threading.Event):
+    def __init__(self):
+        super().__init__()
+        self.data = None
+
+    def set_data(self, data):
+        if self.data == None:
+            self.data = data
+        else:
+            raise Exception('Cannot reset data of a DataEvent object')
+
+    def get_data(self):
+        return self.data
 
 class Client(QObject):
     #synchronization objects
@@ -91,9 +107,16 @@ class Client(QObject):
     #             self.client.socket_lock.release()
     #     return wrapper
 
-    def send_message(self, data : NetMessage):
+    def send_message(self, data : NetMessage, track_event=False):
         logging.debug(f"Sending message {data}")
-        self._message_queue.put(NetProtocol.packNetMessage(data))
+        if track_event: #if wants to track the response, then add an id to the message and add it to the response_events dict and return the event
+            id = UniqueIDInstance.getId()
+            response_events[id] = DataEvent()
+            data.id = id #send the id to the client so it can copy it
+            self._message_queue.put(NetProtocol.packNetMessage(data))
+            return response_events[id]
+        else:
+            self._message_queue.put(NetProtocol.packNetMessage(data))
 
 # class GetSystemInfo(QRunnable):
 #     def __init__(self, client: Client):
@@ -129,6 +152,9 @@ class MessageHandler(QRunnable):
         self.message = None
 
     def run(self) -> None:
+        #event tracking data
+        eventAttachedData = None #by default no data
+
         self.message = orjson.loads(self._message_bytes)
         logging.debug(f"MessageHandler running with message {self.message} from client {self.client.address}")
         if self.message["type"] == NetTypes.NetRequest:
@@ -154,13 +180,26 @@ class MessageHandler(QRunnable):
             self.client.dataLock.release_write()
 
             self.client.sSystemInformation_update.emit()
-        elif self.message["type"] == NetTypes.NetSystemMetrics.value: #if a message is
+        elif self.message["type"] == NetTypes.NetSystemMetrics.value: #if a message is metrics
             data = self.message["data"]
             dataStructure = NetSystemMetrics(**data)
+            if(dataStructure.CPU_LOAD == None): #fix for cpu load being None
+                dataStructure.CPU_LOAD = 0
             self.client.dataLock.acquire_write()
             self.client.systemMetrics = dataStructure
             self.client.dataLock.release_write()
             self.client.sSystemMetrics_update.emit()
+        elif self.message["type"] == NetTypes.NetDirectoryListing.value:
+            data = self.message["data"]
+            dataStructure = NetDirectoryListing(**data)
+            eventAttachedData = dataStructure
+        if self.message["id"] is not None: #check is message has response id
+            UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
+            if eventAttachedData is not None:
+                response_events[self.message["id"]].set_data(eventAttachedData)
+            response_events[self.message["id"]].set() #set the event to notify the waiting thread
+            response_events.pop(self.message["id"]) #remove the event from the response events
+
 
 class ClientConnectionHandler(QRunnable):
     def __init__(self, client: Client):

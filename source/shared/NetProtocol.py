@@ -9,16 +9,25 @@ class NetTypes(Enum):
     NetSystemInformation = 1
     NetSystemMetrics = 2
     NetIdentification = 3
+    NetDirectoryListing = 4
+    NetDirectoryFile = 5
+    NetDirectoryFolderCollapsable = 6
+    NetDirectoryFolderEmpty = 7
 
 class NetDataStructure:
     pass
 
+@dataclasses.dataclass
 class NetDirectoryItem:
+    name: str
+    path : str
+    itemtype : str
+    icon : str
     def __init__(self, name: str, path: str, item_type, icon = "None"):
         self.name = name
         self.path = path
         self.itemtype = item_type
-        self.icon = None
+        self.icon = icon
 
 @dataclasses.dataclass
 class NetDirectoryListing(NetDataStructure):
@@ -29,6 +38,13 @@ class NetDirectoryListing(NetDataStructure):
 class NetMessage:
     type : int
     data : typing.Union[NetDataStructure, int]
+    id : int
+    extra : str
+    def __init__(self, type, data, id=None, extra=""):
+        self.type = type
+        self.data = data
+        self.id = id
+        self.extra = extra
 
 @dataclasses.dataclass
 class NetIdentification(NetDataStructure):

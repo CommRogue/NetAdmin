@@ -10,6 +10,9 @@ from NetProtocol import *
 import psutil
 import GPUtil
 import winreg
+import win32api
+from os import listdir
+from os.path import isfile, join
 
 def set_id(id):
     key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
@@ -27,32 +30,50 @@ def main():
     while True:
         size, message = NetProtocol.unpackFromSocket(s)
         message = orjson.loads(message)
+        id = message['id']
         if message['type'] == NetTypes.NetRequest.value:
             if message['data'] == NetTypes.NetIdentification.value: #if request to identify
                 try:
                     uid = get_id()
                 except:
-                    message = NetIdentification("")
+                    sMessage = NetIdentification("")
                 else:
-                    message = NetIdentification(uid)
-                s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetIdentification, data=message)))
+                    sMessage = NetIdentification(uid)
+                s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetIdentification, data=sMessage, id=id)))
             elif message['data'] == NetTypes.NetSystemInformation.value:
-                message = NetSystemInformation(
+                sMessage = NetSystemInformation(
                     platform.node(),
                     platform.system(),
                     platform.processor(),
                     platform.machine(),
                     computer.Win32_VideoController()[0].Name
                 )
-                s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetSystemInformation, message)))
+                s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetSystemInformation, sMessage, id=id)))
             elif message['data'] == NetTypes.NetSystemMetrics.value:
-                message = NetSystemMetrics(
-                    computer.Win32_Processor()[0].LoadPercentage,
+                sMessage = NetSystemMetrics(
+                    psutil.cpu_percent(),
                     RAM_LOAD=psutil.virtual_memory().percent,
                     GPU_LOAD=GPUtil.getGPUs()[0].load,
                     DISK_LOAD=psutil.disk_usage('/')[3]
                 )
-                s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetSystemMetrics, message)))
+                s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetSystemMetrics, sMessage, id=id)))
+            elif message['data'] == NetTypes.NetDirectoryListing.value:
+                directory = message['extra']
+                if(directory == ""):
+                    drives = win32api.GetLogicalDriveStrings()
+                    drives = drives.split('\000')[:-1]
+                    sMessage = NetDirectoryListing("", [])
+                    for drive in drives:
+                        sMessage.items.append(NetDirectoryItem(drive[:2], drive, NetTypes.NetDirectoryFolderCollapsable.value))
+                else:
+                    files = [f for f in listdir(directory) if isfile(join(directory, f))]
+                    folders = [f for f in listdir(directory) if not isfile(join(directory, f))]
+                    sMessage = NetDirectoryListing(directory, [])
+                    for folder in folders:
+                        sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable.value))
+                    for file in files:
+                        sMessage.items.append(NetDirectoryItem(file, directory+file+"\\", NetTypes.NetDirectoryFile.value))
+                s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))
         elif message['type'] == NetTypes.NetIdentification.value:
             set_id(message['data']['id'])
 
