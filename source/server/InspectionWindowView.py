@@ -1,11 +1,11 @@
 import sys
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QCloseEvent
+from PyQt5.QtGui import QCloseEvent, QBrush, QColor
 from PyQt5.QtCore import pyqtSignal
 
 class FileExplorerItem(QTreeWidgetItem):
-    def __init__(self, text : str, path, collapsable, parent=None, icon=None):
+    def __init__(self, text : str, path, collapsable, parent=None, styling=None):
         if parent:
             super().__init__(type=1001, parent=parent, strings=[text])
         else:
@@ -15,7 +15,8 @@ class FileExplorerItem(QTreeWidgetItem):
         else:
             self.setChildIndicatorPolicy(QTreeWidgetItem.DontShowIndicator)
         self.path = path
-        self.icon = icon
+        if styling:
+            self.setForeground(0, QBrush(QColor(styling.color)))
 
 class ClientInspectorView(QMainWindow):
     exitEvent = pyqtSignal(QCloseEvent)

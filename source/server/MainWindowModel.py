@@ -4,8 +4,6 @@ import typing
 import re
 import json
 from urllib.request import urlopen
-sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
-from NetProtocol import *
 import threading
 import socket
 import select
@@ -20,6 +18,8 @@ import SocketLock
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery, QSqlError, QSqlQueryModel
 import uuid
 import UniqueID
+sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
+from NetProtocol import *
 
 class bcolors:
     HEADER = '\033[95m'
@@ -33,36 +33,64 @@ class bcolors:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
+# the UID instance for generating IDs for each message to be echoed by the client
 UniqueIDInstance = UniqueID.UniqueIDInstance()
-response_events = {} #conditions
+
+# stored events that are used by functions that call send_message and are tracking the response
+response_events = {}
 
 clients = {}
 
-# logger = logging.getLogger()
-# logger.setLevel(logging.DEBUG)
-# logger.setFormatter(logging.Formatter(bcolors.WARNING + '%[(asctime)s] - [%(threadName)s] - [%(levelname)s]:' + bcolors.OKGREEN + '    %(message)s'))
 logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(levelname)s:' + bcolors.OKGREEN + '    %(message)s' + bcolors.END, level=logging.DEBUG)
 
 class DataEvent(threading.Event):
+    '''
+    An override of the threading.Event class that allows for the data to be stored in the event,
+    so that it can be accessed by the thread that is waiting on the event to finish.
+    '''
+
     def __init__(self):
         super().__init__()
         self.data = None
 
     def set_data(self, data):
+        """
+        sets the event's data. may only be called once.
+        Args:
+            data: the data to be stored in the event
+        """
+        #check if there is no data already stored in the event
         if self.data == None:
             self.data = data
+
+        #if there is data already stored in the event, raise an exception
         else:
             raise Exception('Cannot reset data of a DataEvent object')
 
     def get_data(self):
+        """
+        gets the event's data.
+        Returns: the event's data.
+
+        """
         return self.data
 
 class Client(QObject):
     #synchronization objects
+    #uuid of the client
     uuid = None
+
+    #condition to tell the ConnectionHandler that client identified
     identificationNotification = threading.Condition()
+    #tuple of (is_identified, is_new) to tell ConnectionHandler how to react
+    identificationNotificationResource = None
+
+    #custom write-read lock for each client so data can be read by multiple threads and written by only one thread at the same time
     dataLock = SocketLock.SocketLock()
+
+    #queue for storing messages to be sent to the client by the select.select loop
     _message_queue = queue.Queue()
+
     # Data segments
     # ---------------
     connectionData = None
@@ -76,9 +104,14 @@ class Client(QObject):
     sSystemMetrics_update = pyqtSignal()
     sConnection_start = pyqtSignal()
     sConnection_end = pyqtSignal()
-    #client_id : str
 
+    #toString function
     def __str__(self):
+        """
+        returns the formatted address of the client as a string.
+        Returns: formatted address of the client.
+
+        """
         return f"{self.address}"
 
     def __init__(self, socket, address):
@@ -89,23 +122,13 @@ class Client(QObject):
         self._socket_lock = threading.Lock()
 
     def close(self):
+        """
+        closes the client and emits a connection_end signal.
+        """
         self.connection_end.emit()
         self.socket.close() #check for problems
 
-    #acquire and release client.socket_lock
-    # def persist_connection(func):
-    #     def wrapper(self, *args, **kwargs):
-    #         try:
-    #             self.client.socket_lock.acquire()
-    #             return func(self, *args, **kwargs)
-    #         except socket.error as e:
-    #             if self.client.socket in clients:
-    #                 c = clients.pop(self.socket)
-    #                 print(f"Client {c} error: {str(e)}")
-    #                 c.close()
-    #         finally:
-    #             self.client.socket_lock.release()
-    #     return wrapper
+
 
     def send_message(self, data : NetMessage, track_event=False):
         logging.debug(f"Sending message {data}")
@@ -118,33 +141,66 @@ class Client(QObject):
         else:
             self._message_queue.put(NetProtocol.packNetMessage(data))
 
-# class GetSystemInfo(QRunnable):
-#     def __init__(self, client: Client):
-#         super().__init__()
-#         self.client = client
-#
-#     @Client.persist_connection
-#     def run(self) -> None:
-#         # self.client.send_data(NetProtocol.heartbeat())
-#         self.client.send_text("info")
-#         response = self.client.read_text()
-#         if response == "heartbeat":
-#             print("heartbeat from ", self.client.address)
-#
-# class Heartbeat(QRunnable):
-#     def __init__(self, client: Client):
-#         super().__init__()
-#         self.client = client
-#
-#     @Client.persist_connection
-#     def run(self) -> None:
-#         # self.client.send_data(NetProtocol.heartbeat())
-#         self.client.send_text("heartbeat")
-#         response = self.client.read_text()
-#         if response == "heartbeat":
-#             print("heartbeat from ", self.client.address)
+class DatabaseHelpers:
+    @staticmethod
+    def open_database(path):
+        """
+        opens the database connection to the database at the given path.
+        Args:
+            path: the path to the database
+
+        Returns: a new database connection to the database at the given path.
+
+        """
+        con = QSqlDatabase.addDatabase("QSQLITE")
+        con.setDatabaseName(path)
+        if not con.open():
+            print("Failed to open database")
+            sys.exit(1)
+        return con
+
+    @staticmethod
+    def find_client(database : QSqlDatabase, uuid : str):
+        """
+        finds a client in the database specified with the specified uuid.
+        Args:
+            uuid: the client's uuid to search for.
+
+        Returns: a tuple of (client_address, client_uuid) if the client is found, None otherwise.
+
+        """
+        findClients = QSqlQuery(database)
+        findClients.exec_("SELECT uuid, address FROM clients WHERE uuid = '" + uuid + "'")
+        if findClients.next():
+            logging.debug(f"Found client in database {uuid}")
+        else:
+            return None
+
+        # ---- suggested autopilot code ---- (consider using this)
+        # query = QSqlQuery(database)
+        # query.prepare("SELECT uuid, address FROM clients WHERE uuid = (:uuid)")
+        # query.bindValue(":uuid", uuid)
+        # query.exec_()
+        # if query.next():
+        #     return Client(uuid=uuid)
+        # else:
+        #     return None
+
+    @staticmethod
+    def insert_client(database : QSqlDatabase, uuid : str, address : str):
+        logging.debug(f"Inserting client {uuid} at {address}")
+        insertClient = QSqlQuery(database)
+        insertClient.prepare(f"INSERT INTO clients (uuid, address) VALUES (?, ?)")
+        insertClient.addBindValue(uuid)
+        insertClient.addBindValue(address)
+        insertClient.exec_()
+
+
 
 class MessageHandler(QRunnable):
+    """
+    A job that handles a message sent to it by the communicator thread.
+    """
     def __init__(self, client: Client, message: bytes):
         super().__init__()
         self.client = client
@@ -152,26 +208,50 @@ class MessageHandler(QRunnable):
         self.message = None
 
     def run(self) -> None:
-        #event tracking data
-        eventAttachedData = None #by default no data
+        # set the event data used to track the response to None
+        eventAttachedData = None
 
+        # unpack the message from bytes (done here so unpacking is done by the thread and not the communicator)
         self.message = orjson.loads(self._message_bytes)
         logging.debug(f"MessageHandler running with message {self.message} from client {self.client.address}")
+
+
+        # --- start of message handling ---
+
         if self.message["type"] == NetTypes.NetRequest:
             pass
+
+        # if client sent an error
+        elif self.message["type"] == NetTypes.NetError.value:
+            logging.error(f"Error from client {self.client.address}: {self.message['data']}")
+
+            # if invalid access to a directory while browsing files
+            if self.message['data']['errorCode'] == NetErrors.NetDirectoryAccessDenied.value:
+                # set the event data to the error message
+                datastructure = NetError(**self.message['data'])
+                eventAttachedData = datastructure
+
+        # if related to identification
         elif self.message["type"] == NetTypes.NetIdentification.value: #check if client sent ID or else send ID
-            if self.message['data']["id"] != "": #also check if id in database
+            #if existing client sent identification
+            if self.message['data']["id"] != "":
+                # check if id is found in database
+
                 self.client.uuid = self.message['data']["id"]
                 logging.debug(f"Client {self.client.address} identified as {self.client.uuid}")
                 self.client.identificationNotification.acquire()
                 self.client.identificationNotification.notify_all()
                 self.client.identificationNotification.release()
-            else: #if no id sent
+
+            # if new client wants identification
+            else:
                 cid = str(uuid.uuid4())
                 logging.info(f"Client {self.client.address} sent identification request. Generating new ID {cid} and sending...")
                 self.client.send_message(NetMessage(NetTypes.NetIdentification, NetIdentification(cid))) #send a client id
                 self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification)) #request to identify again
-        elif self.message["type"] == NetTypes.NetSystemInformation.value: #if a message is
+
+        # if related to response to system information
+        elif self.message["type"] == NetTypes.NetSystemInformation.value:
             data = self.message["data"]
             dataStructure = NetSystemInformation(**data)
 
@@ -195,11 +275,10 @@ class MessageHandler(QRunnable):
             eventAttachedData = dataStructure
         if self.message["id"] is not None: #check is message has response id
             UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
-            if eventAttachedData is not None:
+            if eventAttachedData is not None: #if there is data to attach to the event
                 response_events[self.message["id"]].set_data(eventAttachedData)
             response_events[self.message["id"]].set() #set the event to notify the waiting thread
             response_events.pop(self.message["id"]) #remove the event from the response events
-
 
 class ClientConnectionHandler(QRunnable):
     def __init__(self, client: Client):
@@ -210,31 +289,46 @@ class ClientConnectionHandler(QRunnable):
         logging.debug(f"ClientConnectionHandler running with client {self.client.address}")
         self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification))
         self.client.identificationNotification.acquire()
+
+        #wait for the client to identify for 10 seconds
         result = self.client.identificationNotification.wait(10)
-        if result:
-            self.client.identificationNotification.release()
-        else:
-            raise Exception("Client identification timed out")
+
+        if not result:
+            raise Exception("ClientConnectionHandler did not receive a response to the identification request it sent to the client...")
+
+        resultData = self.client.identificationNotificationResource
+        self.client.identificationNotification.release()
+
+        #NOTE - WE CAN'T SET RESULT DATA 0 (WHETHER IDENTIFIED OR NOT), SO INSTEAD, JUST STORE WHETHER FOUND IN DATABASE OR NOT (NO TUPLE), AND CHECK IF IDENTIFIED VIA THE RESULT OF IDENTIFICATIONNOTIFICATION
+
+        #if client identified
+        if not resultData[0]:
+            logging.warning(f"Client {self.client.address} timed out while identifying")
+            #optionally remove the client from the global list?
 
 
-        #add client to database
-        con = QSqlDatabase.addDatabase("QSQLITE")
-        con.setDatabaseName(os.getenv("LOCALAPPDATA")+"\\NetAdmin\\clients.db")
-        if not con.open():
-            print("Failed to open database")
-            sys.exit(1)
-        findClients = QSqlQuery()
-        findClients.exec_("SELECT uuid, address FROM clients WHERE uuid = '" + self.client.uuid + "'")
-        if findClients.next():
-            logging.debug(f"Client {self.client.uuid} already in database")
-        else:
-            logging.debug(f"Client {self.client.uuid} not in database. Adding to database....")
-            addClient = QSqlQuery()
-            addClient.prepare(f"INSERT INTO clients (uuid, address) VALUES (?, ?)")
-            addClient.addBindValue(str(self.client.uuid))
-            addClient.addBindValue(str(self.client.address[0]))
-            addClient.exec_()
-        con.close()
+        # ---- add client to database if needed (specified by the identification data ----
+        if resultData[1]: # if new client (need to add to database)
+            #open database
+            con = DatabaseHelpers.open_database(os.getenv("LOCALAPPDATA")+"\\NetAdmin\\clients.db")
+
+            ########DELETE
+            # findClients = QSqlQuery()
+            # findClients.exec_("SELECT uuid, address FROM clients WHERE uuid = '" + self.client.uuid + "'")
+            # if findClients.next():
+            #     logging.debug(f"Client {self.client.uuid} already in database")
+
+            # insert the client into the database
+            DatabaseHelpers.insert_client(con, self.client.uuid, self.client.address[0])
+
+                ############DELETE
+                # logging.debug(f"Client {self.client.uuid} not in database. Adding to database....")
+                # addClient = QSqlQuery()
+                # addClient.prepare(f"INSERT INTO clients (uuid, address) VALUES (?, ?)")
+                # addClient.addBindValue(str(self.client.uuid))
+                # addClient.addBindValue(str(self.client.address[0]))
+                # addClient.exec_()
+            con.close()
 
         if self.client.address[0] != "127.0.0.1":
             response = urlopen(f"http://ipinfo.io/{self.client.address[0]}/json")
@@ -340,3 +434,45 @@ class MainWindowModel: #fix main window closing and not client inspection window
 
     def install(self):
         pass
+
+
+#acquire and release client.socket_lock
+    # def persist_connection(func):
+    #     def wrapper(self, *args, **kwargs):
+    #         try:
+    #             self.client.socket_lock.acquire()
+    #             return func(self, *args, **kwargs)
+    #         except socket.error as e:
+    #             if self.client.socket in clients:
+    #                 c = clients.pop(self.socket)
+    #                 print(f"Client {c} error: {str(e)}")
+    #                 c.close()
+    #         finally:
+    #             self.client.socket_lock.release()
+    #     return wrapper
+
+#class GetSystemInfo(QRunnable):
+#     def __init__(self, client: Client):
+#         super().__init__()
+#         self.client = client
+#
+#     @Client.persist_connection
+#     def run(self) -> None:
+#         # self.client.send_data(NetProtocol.heartbeat())
+#         self.client.send_text("info")
+#         response = self.client.read_text()
+#         if response == "heartbeat":
+#             print("heartbeat from ", self.client.address)
+#
+# class Heartbeat(QRunnable):
+#     def __init__(self, client: Client):
+#         super().__init__()
+#         self.client = client
+#
+#     @Client.persist_connection
+#     def run(self) -> None:
+#         # self.client.send_data(NetProtocol.heartbeat())
+#         self.client.send_text("heartbeat")
+#         response = self.client.read_text()
+#         if response == "heartbeat":
+#             print("heartbeat from ", self.client.address)

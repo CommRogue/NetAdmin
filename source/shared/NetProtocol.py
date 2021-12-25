@@ -13,21 +13,40 @@ class NetTypes(Enum):
     NetDirectoryFile = 5
     NetDirectoryFolderCollapsable = 6
     NetDirectoryFolderEmpty = 7
+    NetError = 8
+
+class NetErrors(Enum):
+    NetDirectoryAccessDenied = 0
 
 class NetDataStructure:
     pass
+
+@dataclasses.dataclass
+class NetError:
+    errorCode : int
+
+@dataclasses.dataclass
+class NetItemStyling:
+    icon : str
+    color : str
+
+@dataclasses.dataclass
+class NetErrorStyling(NetItemStyling):
+    icon = None
+    color = "#e80c25"
 
 @dataclasses.dataclass
 class NetDirectoryItem:
     name: str
     path : str
     itemtype : str
-    icon : str
-    def __init__(self, name: str, path: str, item_type, icon = "None"):
+    styling : NetItemStyling
+
+    def __init__(self, name: str, path: str, item_type, styling = None):
         self.name = name
         self.path = path
         self.itemtype = item_type
-        self.icon = icon
+        self.icon = styling
 
 @dataclasses.dataclass
 class NetDirectoryListing(NetDataStructure):
