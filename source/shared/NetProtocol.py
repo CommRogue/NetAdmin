@@ -4,6 +4,7 @@ import typing
 import struct
 from enum import Enum
 
+
 class NetTypes(Enum):
     NetRequest = 0
     NetSystemInformation = 1
@@ -13,89 +14,107 @@ class NetTypes(Enum):
     NetDirectoryFile = 5
     NetDirectoryFolderCollapsable = 6
     NetDirectoryFolderEmpty = 7
-    NetError = 8
+    NetDeleteFile = 8
+    NetStatus = 9
 
-class NetErrors(Enum):
-    NetDirectoryAccessDenied = 0
+
+class NetStatusTypes(Enum):
+    NetOK = 0
+    NetDirectoryAccessDenied = 1
+    NetInvalidIdentification = 2
+    NetFileNotFound = 3
+
 
 class NetDataStructure:
     pass
 
+
 @dataclasses.dataclass
-class NetError:
-    errorCode : int
+class NetStatus:
+    statusCode: int
+
 
 @dataclasses.dataclass
 class NetItemStyling:
-    icon : str
-    color : str
+    icon: str
+    color: str
+
 
 @dataclasses.dataclass
 class NetErrorStyling(NetItemStyling):
     icon = None
     color = "#e80c25"
 
+
 @dataclasses.dataclass
 class NetDirectoryItem:
     name: str
-    path : str
-    itemtype : str
-    styling : NetItemStyling
+    path: str
+    itemtype: str
+    styling: NetItemStyling
 
-    def __init__(self, name: str, path: str, item_type, styling = None):
+    def __init__(self, name: str, path: str, item_type, styling=None):
         self.name = name
         self.path = path
         self.itemtype = item_type
         self.icon = styling
 
+
 @dataclasses.dataclass
 class NetDirectoryListing(NetDataStructure):
     directory: str
-    items : typing.List[NetDirectoryItem]
+    items: typing.List[NetDirectoryItem]
+
 
 @dataclasses.dataclass
 class NetMessage:
-    type : int
-    data : typing.Union[NetDataStructure, int]
-    id : int
-    extra : str
+    type: int
+    data: typing.Union[NetDataStructure, int]
+    id: int
+    extra: str
+
     def __init__(self, type, data, id=None, extra=""):
         self.type = type
         self.data = data
         self.id = id
         self.extra = extra
 
+
 @dataclasses.dataclass
 class NetIdentification(NetDataStructure):
-    id : str
+    id: str
+
 
 @dataclasses.dataclass
 class NetGeoInfo:
-    COUNTRY : str
-    CITY : str
-    REAL_IP : str
+    COUNTRY: str
+    CITY: str
+    REAL_IP: str
+
 
 @dataclasses.dataclass
 class NetSystemInformation(NetDataStructure):
-    DESKTOP_NAME : str
-    OPERATING_SYSTEM_VERSION : str
-    PROCESSOR_NAME : str
-    PROCESSOR_ARCHITECTURE : str
-    GPU_NAME : str
+    DESKTOP_NAME: str
+    OPERATING_SYSTEM_VERSION: str
+    PROCESSOR_NAME: str
+    PROCESSOR_ARCHITECTURE: str
+    GPU_NAME: str
+
 
 @dataclasses.dataclass
 class NetSystemMetrics(NetDataStructure):
-    CPU_LOAD : float
+    CPU_LOAD: float
     GPU_LOAD: float
-    RAM_LOAD : float
-    DISK_LOAD : float
+    RAM_LOAD: float
+    DISK_LOAD: float
+
 
 class NetProtocol:
     @staticmethod
     def serialize(data):
         return orjson.dumps(data)
 
-    #serialize and add byte size
+    # serialize and add byte size
     @staticmethod
     def messagePacker(func):
         def wrapper(*args, **kwargs):
@@ -103,10 +122,11 @@ class NetProtocol:
             res = NetProtocol.serialize(res)
             res = struct.pack(">I", len(res)) + res
             return res
+
         return wrapper
 
     @staticmethod
-    def packNetMessage(data : NetMessage):
+    def packNetMessage(data: NetMessage):
         data = NetProtocol.serialize(data)
         data = struct.pack(">I", len(data)) + data
         return data
@@ -114,6 +134,7 @@ class NetProtocol:
     @staticmethod
     def unpackFromSocket(socket):
         try:
+            # receive the message size as a 4 byte integer
             size = socket.recv(4)
         except ConnectionError:
             return -1, -1

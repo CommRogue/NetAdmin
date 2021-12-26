@@ -5,17 +5,7 @@ import functools
 from PyQt5.QtCore import pyqtSignal, QThread, QObject, QRunnable, QThreadPool
 import typing
 from PyQt5.QtWidgets import QTableWidgetItem, QTreeWidgetItem, QTreeWidgetItemIterator
-
-from source.server.InspectionWindowView import FileExplorerItem
-
-
-def clearItemChildren(item):
-    print("started")
-    while(item.childCount() > 0):
-        child = item.child(0)
-        item.removeChild(child)
-        del child
-    print("finished")
+from fileExplorerManager import FileExplorerManager
 
 
 class TabThreadEventManager(): #container class for the events that tab threads wait for
@@ -45,48 +35,7 @@ class TabThreadEventManager(): #container class for the events that tab threads 
 #     def run(self):
 #         time.sleep(10)
 
-
-class DirectoryListingAction(QRunnable):
-    def __init__(self, client, view, sUpdate, sClear, itemParent=None):
-        super().__init__()
-        self.itemParent = itemParent
-        self.view = view
-        self.client = client
-        self.sUpdate = sUpdate
-        self.sClear = sClear
-
-    def run(self):
-        if self.itemParent: #if the click is directed towards a directory and not just the drives
-            path = self.itemParent.path
-            self.sUpdate.emit(FileExplorerItem("Loading...", "", False, None, None), self.itemParent)
-        else: #if directory is the drives (root)
-            #self.view.fileViewer.insertTopLevelItem(0, QTreeWidgetItem(["Loading..."]))
-            path = "" #set the path to none to get root directory listing
-        event = self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDirectoryListing, id=None, extra=path), track_event=True)
-        event.wait()
-        data = event.get_data()
-
-        if self.itemParent:  # if a directory, then clear the "Loading..." item or the previous items from the last click
-            self.sClear.emit(self.itemParent)
-
-        if type(data) is NetError:
-            self.sUpdate.emit(FileExplorerItem("Access is denied to this directory", "", False, None, NetErrorStyling), self.itemParent) #will send itemParent as none if there is no parent
-        else:
-            for item in data.items:
-                if self.itemParent: #if must connect as a child to another item in the tree view
-                    if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value:
-                        collapsable = True
-                    else:
-                        collapsable = False
-                    self.sUpdate.emit(FileExplorerItem(item["name"], item["path"], collapsable, None, None), self.itemParent)
-                else:
-                    self.sUpdate.emit(FileExplorerItem(item["name"], item["path"], True, None, None), None)
-
-
 class ClientInspectorController(QObject):
-    sDirectoryListingUpdate = pyqtSignal(FileExplorerItem, object) #child, parent
-    sClearDirectoryListing = pyqtSignal(FileExplorerItem) #parent
-
     def requestMetrics(self, client, shownEvent : threading.Event, tabEvent : threading.Event):
         while shownEvent.wait() and tabEvent.wait():
             event = client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetSystemMetrics), track_event=True)
@@ -95,26 +44,14 @@ class ClientInspectorController(QObject):
             print("got response")
             time.sleep(0.5)
 
-    def clearDirectoryListing(self, parent : FileExplorerItem):
-        clearItemChildren(parent)
-
-    def updateDirectoryListing(self, child : FileExplorerItem, parent: FileExplorerItem):
-        if parent:
-            parent.insertChild(0, child)
-        else:
-            self.view.fileViewer.insertTopLevelItem(0, child)
-
     def __init__(self, view, client):
         super().__init__()
-        self.sClearDirectoryListing.connect(self.clearDirectoryListing)
-        self.sDirectoryListingUpdate.connect(self.updateDirectoryListing)
-        self.fileExplorerInitialized = False
         self.tabEventManager = TabThreadEventManager(0, *[threading.Event() for i in range(2)])
         self.view = view
         self.client = client
         self.shown = threading.Event()
         self.view.tabWidget.currentChanged.connect(self.tabChanged)
-        self.view.fileViewer.itemExpanded.connect(self.fileViewerItemExpanded)
+        self.fileExplorerManager = FileExplorerManager(client, self.view)
         client.dataLock.acquire_read()
 
         # #start the file explorer thread
@@ -134,10 +71,6 @@ class ClientInspectorController(QObject):
         thread1 = threading.Thread(target=self.requestMetrics, args=(client, self.shown, self.tabEventManager.get_event(0)))
         thread1.start()
 
-    def fileViewerItemExpanded(self, item):
-        threadPool = QThreadPool.globalInstance()
-        threadPool.start(DirectoryListingAction(self.client, self.view, self.sDirectoryListingUpdate, self.sClearDirectoryListing, item))
-
     def startThreads(self):
         self.updateMetricsThread = threading.Thread(target=self.updateMetrics)
         self.updateMetricsThread.start()
@@ -155,10 +88,8 @@ class ClientInspectorController(QObject):
     def tabChanged(self, index):
         self.tabEventManager.set_event(index)
         if index == 1: #file explorer tab
-            if not self.fileExplorerInitialized:
-                self.fileExplorerInitialized = True
-                threadPool = QThreadPool.globalInstance()
-                threadPool.start(DirectoryListingAction(self.client, self.view, self.sDirectoryListingUpdate, self.sClearDirectoryListing, None))
+            if not self.fileExplorerManager.is_initialized():
+                self.fileExplorerManager.initializeContents()
 
     def updateSystemInformation(self):
         self.client.dataLock.acquire_read()

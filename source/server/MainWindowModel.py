@@ -43,6 +43,16 @@ clients = {}
 
 logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(levelname)s:' + bcolors.OKGREEN + '    %(message)s' + bcolors.END, level=logging.DEBUG)
 
+def threadpool_job_tracker(attr_str):
+    def decorator(func):
+        def wrapper(self, *args, **kwargs):
+            attr = getattr(self, attr_str)
+            attr.emit()
+            func(self, *args, **kwargs)
+            attr.emit()
+        return wrapper
+    return decorator
+
 class DataEvent(threading.Event):
     '''
     An override of the threading.Event class that allows for the data to be stored in the event,
@@ -82,8 +92,6 @@ class Client(QObject):
 
     #condition to tell the ConnectionHandler that client identified
     identificationNotification = threading.Condition()
-    #tuple of (is_identified, is_new) to tell ConnectionHandler how to react
-    identificationNotificationResource = None
 
     #custom write-read lock for each client so data can be read by multiple threads and written by only one thread at the same time
     dataLock = SocketLock.SocketLock()
@@ -108,7 +116,7 @@ class Client(QObject):
     #toString function
     def __str__(self):
         """
-        returns the formatted address of the client as a string.
+        get the formatted address of the client as a string.
         Returns: formatted address of the client.
 
         """
@@ -128,18 +136,17 @@ class Client(QObject):
         self.connection_end.emit()
         self.socket.close() #check for problems
 
-
-
     def send_message(self, data : NetMessage, track_event=False):
-        logging.debug(f"Sending message {data}")
         if track_event: #if wants to track the response, then add an id to the message and add it to the response_events dict and return the event
             id = UniqueIDInstance.getId()
             response_events[id] = DataEvent()
             data.id = id #send the id to the client so it can copy it
             self._message_queue.put(NetProtocol.packNetMessage(data))
+            logging.debug(f"Sending message {data}")
             return response_events[id]
         else:
             self._message_queue.put(NetProtocol.packNetMessage(data))
+            logging.debug(f"Sending message {data}")
 
 class DatabaseHelpers:
     @staticmethod
@@ -173,6 +180,7 @@ class DatabaseHelpers:
         findClients.exec_("SELECT uuid, address FROM clients WHERE uuid = '" + uuid + "'")
         if findClients.next():
             logging.debug(f"Found client in database {uuid}")
+            return (findClients.value(1), findClients.value(0))
         else:
             return None
 
@@ -201,12 +209,20 @@ class MessageHandler(QRunnable):
     """
     A job that handles a message sent to it by the communicator thread.
     """
-    def __init__(self, client: Client, message: bytes):
+
+    # qt signal for signaling that the task is started/finished to control the status bar task count
+
+    def __init__(self, client: Client, message: bytes, taskCountEvent : pyqtSignal):
         super().__init__()
         self.client = client
+        # undecoded message in bytes
         self._message_bytes = message
+        # decoded message (set in the run method)
         self.message = None
+        # qt signal for signaling that the task is started/finished to control the status bar task count
+        self.event = taskCountEvent
 
+    @threadpool_job_tracker("event")
     def run(self) -> None:
         # set the event data used to track the response to None
         eventAttachedData = None
@@ -221,37 +237,51 @@ class MessageHandler(QRunnable):
         if self.message["type"] == NetTypes.NetRequest:
             pass
 
-        # if client sent an error
-        elif self.message["type"] == NetTypes.NetError.value:
-            logging.error(f"Error from client {self.client.address}: {self.message['data']}")
+        # if client sent an status code
+        elif self.message["type"] == NetTypes.NetStatus.value:
+            logging.error(f"Status code from client {self.client.address}: {self.message['data']}")
 
-            # if invalid access to a directory while browsing files
-            if self.message['data']['errorCode'] == NetErrors.NetDirectoryAccessDenied.value:
-                # set the event data to the error message
-                datastructure = NetError(**self.message['data'])
-                eventAttachedData = datastructure
+            # set the event data to the status message
+            datastructure = NetStatus(**self.message['data']) # 'data' field contains a NetError instance
+            eventAttachedData = datastructure
 
         # if related to identification
         elif self.message["type"] == NetTypes.NetIdentification.value: #check if client sent ID or else send ID
+            con = DatabaseHelpers.open_database(os.getenv("LOCALAPPDATA")+"\\NetAdmin\\clients.db")
+
             #if existing client sent identification
             if self.message['data']["id"] != "":
                 # check if id is found in database
+                found = DatabaseHelpers.find_client(con, self.message['data']["id"])
 
-                self.client.uuid = self.message['data']["id"]
-                logging.debug(f"Client {self.client.address} identified as {self.client.uuid}")
-                self.client.identificationNotification.acquire()
-                self.client.identificationNotification.notify_all()
-                self.client.identificationNotification.release()
+                # if id not found, log and send error to the client
+                if found is None:
+                    logging.debug(f"Client {self.client.address[0]} sent INVALID identification {self.message['data']['id']}")
+                    self.client.send_message(NetMessage(NetTypes.NetStatus, NetStatusTypes.NetInvalidIdentification))
+
+                #if identification is found and valid then log, set the local client instance's uid, and notify identificationNotification
+                else:
+                    logging.debug(f"Client {self.client.address[0]} sent valid identification {self.message['data']['id']}")
+                    self.client.uuid = self.message['data']["id"]
+                    logging.debug(f"Client {self.client.address} identified as {self.client.uuid}")
+                    self.client.identificationNotification.acquire()
+                    self.client.identificationNotification.notify_all()
+                    self.client.identificationNotification.release()
 
             # if new client wants identification
             else:
+                # generate a new uuid
                 cid = str(uuid.uuid4())
                 logging.info(f"Client {self.client.address} sent identification request. Generating new ID {cid} and sending...")
+
+                #send the new id to the client, add it to the database, and request the client to authunticate again
                 self.client.send_message(NetMessage(NetTypes.NetIdentification, NetIdentification(cid))) #send a client id
+                DatabaseHelpers.insert_client(con, cid, self.client.address[0])
                 self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification)) #request to identify again
 
         # if related to response to system information
         elif self.message["type"] == NetTypes.NetSystemInformation.value:
+            # load the system information datastructure from the message, update the local client instance, and emit sSystemInformation_update
             data = self.message["data"]
             dataStructure = NetSystemInformation(**data)
 
@@ -260,19 +290,30 @@ class MessageHandler(QRunnable):
             self.client.dataLock.release_write()
 
             self.client.sSystemInformation_update.emit()
-        elif self.message["type"] == NetTypes.NetSystemMetrics.value: #if a message is metrics
+
+        # if related to response to metrics
+        elif self.message["type"] == NetTypes.NetSystemMetrics.value: #ADD CHECKS FOR VALID METRICS
+            # load the system metrics datastructure from the message, update the local client instance, and emit sSystemMetrics_update
             data = self.message["data"]
             dataStructure = NetSystemMetrics(**data)
+
             if(dataStructure.CPU_LOAD == None): #fix for cpu load being None
                 dataStructure.CPU_LOAD = 0
+
             self.client.dataLock.acquire_write()
             self.client.systemMetrics = dataStructure
             self.client.dataLock.release_write()
             self.client.sSystemMetrics_update.emit()
+
+        # if related to response to directory listing
         elif self.message["type"] == NetTypes.NetDirectoryListing.value:
+            # load the directory listing datastructure from the message, and set the event-attached-data to it, so the thread that called send_message will get the data
             data = self.message["data"]
             dataStructure = NetDirectoryListing(**data)
             eventAttachedData = dataStructure
+
+        # lastly, check if the message is tracked by a thread
+        # if so, then set the event, and optionally attach the data to it
         if self.message["id"] is not None: #check is message has response id
             UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
             if eventAttachedData is not None: #if there is data to attach to the event
@@ -281,58 +322,41 @@ class MessageHandler(QRunnable):
             response_events.pop(self.message["id"]) #remove the event from the response events
 
 class ClientConnectionHandler(QRunnable):
-    def __init__(self, client: Client):
+    '''
+    Job to handle a client connection.
+    '''
+    def __init__(self, client: Client, threadPoolTaskEvent : pyqtSignal):
         super().__init__()
         self.client = client
+        self.event = threadPoolTaskEvent
 
+    @threadpool_job_tracker("event")
     def run(self) -> None:
+        '''
+        Summary: send a identification request to the client, and wait for a response.
+        If the response is a success, then the client is authenticated. Otherwise, it is removed from the client list (implement this!!!)
+        After the identification, the function resolves the IP and gets the GEOInfo data of the IP, and updates the client instance with it.
+        Lastly, the function emits a sConnection_start signal.
+        '''
+
         logging.debug(f"ClientConnectionHandler running with client {self.client.address}")
         self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification))
         self.client.identificationNotification.acquire()
 
         #wait for the client to identify for 10 seconds
         result = self.client.identificationNotification.wait(10)
-
-        if not result:
-            raise Exception("ClientConnectionHandler did not receive a response to the identification request it sent to the client...")
-
-        resultData = self.client.identificationNotificationResource
         self.client.identificationNotification.release()
 
-        #NOTE - WE CAN'T SET RESULT DATA 0 (WHETHER IDENTIFIED OR NOT), SO INSTEAD, JUST STORE WHETHER FOUND IN DATABASE OR NOT (NO TUPLE), AND CHECK IF IDENTIFIED VIA THE RESULT OF IDENTIFICATIONNOTIFICATION
+        #if the client didn't identify within 10 seconds, close the connection (implement close connection
+        if not result:
+            logging.warning(f"ClientConnectionHandler did not receive a response to the identification request it sent to {self.client.address[0]}...")
+            #....remove the client from the global list?
+            return
 
-        #if client identified
-        if not resultData[0]:
-            logging.warning(f"Client {self.client.address} timed out while identifying")
-            #optionally remove the client from the global list?
-
-
-        # ---- add client to database if needed (specified by the identification data ----
-        if resultData[1]: # if new client (need to add to database)
-            #open database
-            con = DatabaseHelpers.open_database(os.getenv("LOCALAPPDATA")+"\\NetAdmin\\clients.db")
-
-            ########DELETE
-            # findClients = QSqlQuery()
-            # findClients.exec_("SELECT uuid, address FROM clients WHERE uuid = '" + self.client.uuid + "'")
-            # if findClients.next():
-            #     logging.debug(f"Client {self.client.uuid} already in database")
-
-            # insert the client into the database
-            DatabaseHelpers.insert_client(con, self.client.uuid, self.client.address[0])
-
-                ############DELETE
-                # logging.debug(f"Client {self.client.uuid} not in database. Adding to database....")
-                # addClient = QSqlQuery()
-                # addClient.prepare(f"INSERT INTO clients (uuid, address) VALUES (?, ?)")
-                # addClient.addBindValue(str(self.client.uuid))
-                # addClient.addBindValue(str(self.client.address[0]))
-                # addClient.exec_()
-            con.close()
-
-        if self.client.address[0] != "127.0.0.1":
+        #if the client identified, resolve the client's IP address
+        if self.client.address[0] != "127.0.0.1": # if not our own computer, then resolve the IP address
             response = urlopen(f"http://ipinfo.io/{self.client.address[0]}/json")
-        else:
+        else: # otherwise resolve our own IP address
             response = urlopen("http://ipinfo.io/json")
         data = json.load(response)
         IP = data['ip']
@@ -348,7 +372,9 @@ class ClientConnectionHandler(QRunnable):
 
 
 class ListenerWorker(QObject):
-    clients_lock = threading.Lock()
+    '''
+    The main communicator thread. Handles the sockets by selecting the active socket descriptors in a background-running loop.
+    '''
     global clients
     sockets = []
     # message_queues = {}
@@ -358,17 +384,15 @@ class ListenerWorker(QObject):
         self.controller = controller
 
     def connectSignals(self, connection : socket):
+        """
+        Connects the client's signals to the corresnponding slots in the controller.
+        Args:
+            connection: the client's socket.
+        """
         clients[connection].sSystemInformation_update.connect(functools.partial(self.controller.on_SystemInformation_update, clients[connection]))
         clients[connection].sSystemMetrics_update.connect(functools.partial(self.controller.on_SystemMetrics_update, clients[connection]))
         clients[connection].sConnection_end.connect(functools.partial(self.controller.on_Connection_end, clients[connection]))
         clients[connection].sConnection_start.connect(functools.partial(self.controller.on_Connection_start, clients[connection]))
-
-    def CommandLineEcho(self):
-        while True:
-            inp = input("")
-            for client in clients.values():
-                if (inp == "information"):
-                    client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetSystemInformation))
 
     def run(self):
         #model
@@ -380,31 +404,40 @@ class ListenerWorker(QObject):
         self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener_socket.bind(('0.0.0.0', 49152))
         self.listener_socket.listen(5)
-        thread = threading.Thread(target=self.CommandLineEcho)
-        thread.start()
 
         while True:
             readable, writable, exceptional = select.select([self.listener_socket] + self.sockets, self.sockets, [])
+
+            #if socket can be read, either a new connection or a new message from a client
             for s in readable:
+                #if the socket is the server's socket, then accept a new connection
                 if s is self.listener_socket:
+                    #accept the connection, append it to the list of sockets, connect the client's signals to the controller, and launch a connection handler job
                     connection, client_address = s.accept()
                     self.sockets.append(connection)
                     # self.message_queues[connection] = queue.Queue()
                     clients[connection] = Client(connection, client_address)
                     self.connectSignals(connection) #connect signals from the client to the controller
                     logging.debug(f"{clients[connection].address} connected")
-                    threadPool.start(ClientConnectionHandler(clients[connection]))
+                    threadPool.start(ClientConnectionHandler(clients[connection], self.controller.sThreadPool_runningTaskCountChanged))
+
+                #if the socket is a client socket, then read a new message
                 else:
                     size, message = NetProtocol.unpackFromSocket(s)
+                    # if unpackFromSocket returns -1, then the socket closed, and therefore the client disconnected
                     if size == -1:
+                        #remove the socket from the list of sockets, close the socket, and emit a sConnection_end signal.
                         logging.debug(f"{clients[s].address} disconnected")
                         self.sockets.remove(s)
                         cl = clients.pop(s)
                         s.close()
                         cl.sConnection_end.emit()
+                    #if unpackFromSocket succeeded, then launch a message handler job
                     elif size != 0:
-                        threadPool.start(MessageHandler(clients[s], message))
+                        threadPool.start(MessageHandler(clients[s], message, self.controller.sThreadPool_runningTaskCountChanged))
 
+            # every cycle (0.01 seconds), check if there is a message in the message queue of each client
+            # if there is a message in a client's message queue, send the message to the client
             for s in writable:
                 if not s._closed and not clients[s]._message_queue.empty():
                     message = clients[s]._message_queue.get_nowait()
@@ -415,8 +448,9 @@ class ListenerWorker(QObject):
             #cycle delay
             sleep(0.01)
 
-class MainWindowModel: #fix main window closing and not client inspection windows
+class MainWindowModel(QObject): #fix main window closing and not client inspection windows
     def __init__(self, controller):
+        super().__init__()
         #open communicator thread and listen
         self.communicator = QThread()
         self.communicator.setObjectName("Communicator Thread")

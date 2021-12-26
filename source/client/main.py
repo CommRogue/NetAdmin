@@ -48,7 +48,44 @@ def main():
 
         id = message['id'] # get the echo id of the message, to echo back to the server when sending response
 
+        #if message is an error
+        if message['type'] == NetTypes.NetStatus.value:
+
+            # identification error
+            if message['data'] == NetStatusTypes.NetInvalidIdentification.value:
+                print("Invalid indentification sent. Resetting...")
+                #reset the id
+                set_id("")
+                #send a request to identify again
+                s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetIdentification, data=NetIdentification(get_id()), id=id)))
+
+        # if message is a request
         if message['type'] == NetTypes.NetRequest.value:
+            # if the request is to delete a file
+            if message['data'] == NetTypes.NetDeleteFile.value:
+                path = message['extra']
+
+                # try to delete the path
+                try:
+                    if os.path.isfile(path): # if the path is a file
+                        os.remove(path)
+                    else: # if the path is a directory
+                        os.rmdir(path)
+
+                # file or directory doesn't exist
+                except FileNotFoundError:
+                    print("File not found: " + path)
+                    s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetFileNotFound.value), id=id)))
+
+                # no access to directory error
+                except WindowsError:
+                    print("Error deleting file: " + path)
+                    s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value), id=id)))
+
+                 # success
+                else:
+                    s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id)))
+
             if message['data'] == NetTypes.NetIdentification.value: #if request to identify
                 try:
                     uid = get_id()
@@ -104,7 +141,7 @@ def main():
                     except PermissionError as e:
                         print("Permission is denied for directory", directory)
                         #send a NetDirectoryAccessDenied error to the server
-                        s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetError, NetError(NetErrors.NetDirectoryAccessDenied.value), id=id)))
+                        s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value), id=id)))
 
                     # if got directory listing (we have permission)
                     else:
@@ -114,7 +151,7 @@ def main():
                         for folder in folders:
                             sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable.value))
                         for file in files:
-                            sMessage.items.append(NetDirectoryItem(file, directory+file+"\\", NetTypes.NetDirectoryFile.value))
+                            sMessage.items.append(NetDirectoryItem(file, directory+file, NetTypes.NetDirectoryFile.value))
                         s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))
 
         # if server sent an id, then set the id to it
