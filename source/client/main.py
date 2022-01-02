@@ -127,7 +127,7 @@ def main():
                     drives = drives.split('\000')[:-1]
                     sMessage = NetDirectoryListing("", [])
                     for drive in drives:
-                        sMessage.items.append(NetDirectoryItem(drive[:2], drive, NetTypes.NetDirectoryFolderCollapsable.value))
+                        sMessage.items.append(NetDirectoryItem(drive[:2], drive, NetTypes.NetDirectoryFolderCollapsable.value, None, None, None))
                     s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))
 
                 # if requesting normal directory
@@ -149,9 +149,9 @@ def main():
 
                         # append NetDirectoryItems for each file/folder
                         for folder in folders:
-                            sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable.value))
+                            sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable, date_created=os.path.getctime(directory+folder+"\\")))
                         for file in files:
-                            sMessage.items.append(NetDirectoryItem(file, directory+file, NetTypes.NetDirectoryFile.value))
+                            sMessage.items.append(NetDirectoryItem(file, directory+file, NetTypes.NetDirectoryFile.value, date_created=os.path.getctime(directory+file), last_modified=os.path.getmtime(directory+file), size=os.path.getsize(directory+file)))
                         s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))
 
         # if server sent an id, then set the id to it

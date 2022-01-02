@@ -2,6 +2,26 @@ from PyQt5.QtCore import *
 from InspectionWindowController import *
 from source.server.InspectionWindowView import FileExplorerItem
 import logging
+import math
+import DUDialog
+
+def bytesToStr(size : int):
+    """
+    Convert file size in bytes to human readable string
+    Args:
+        size: integer of the size in bytes.
+
+    Returns: a string representing the size in human readable format.
+    """
+    if size:
+        size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+        # get size name
+        i = int(math.floor(math.log(size, 1024)))
+        # get remainder
+        p = math.pow(1024, i)
+        s = round(size / p, 2)
+        return f"{s} {size_name[i]}"
+    return size
 
 class DirectoryDeletionAction(QRunnable):
     def __init__(self, client, selection, sUpdate, sClear, sRemove):
@@ -35,7 +55,7 @@ class DirectoryListingAction(QRunnable):
     def run(self):
         if self.itemParent: #if the click is directed towards a directory and not just the drives
             path = self.itemParent.path
-            self.sUpdate.emit(FileExplorerItem("Loading...", "", False, None, None), self.itemParent)
+            self.sUpdate.emit(FileExplorerItem(None, False, ["Loading...."], size=None, parent=self.itemParent, styling=None), self.itemParent)
         else: #if directory is the drives (root)
             #self.view.fileViewer.insertTopLevelItem(0, QTreeWidgetItem(["Loading..."]))
             path = "" #set the path to none to get root directory listing
@@ -47,17 +67,24 @@ class DirectoryListingAction(QRunnable):
             self.sClear.emit(self.itemParent)
 
         if type(data) is NetStatus and data.statusCode == NetStatusTypes.NetDirectoryAccessDenied.value:
-            self.sUpdate.emit(FileExplorerItem("Access is denied to this directory", "", False, None, NetErrorStyling), self.itemParent) #will send itemParent as none if there is no parent
+            self.sUpdate.emit(FileExplorerItem(None, False, ["Access is denied to this directory...."], None, self.itemParent, NetErrorStyling), self.itemParent) #will send itemParent as none if there is no parent
         else:
             for item in data.items:
-                if self.itemParent: #if must connect as a child to another item in the tree view
-                    if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value:
-                        collapsable = True
-                    else:
-                        collapsable = False
-                    self.sUpdate.emit(FileExplorerItem(item["name"], item["path"], collapsable, None, None), self.itemParent)
+                if item["date_created"]:
+                    date_created = str(datetime.datetime.fromtimestamp(item["date_created"]))
                 else:
-                    self.sUpdate.emit(FileExplorerItem(item["name"], item["path"], True, None, None), None)
+                    date_created = None
+                if item["last_modified"]:
+                    date_modified = str(datetime.datetime.fromtimestamp(item["last_modified"]))
+                else:
+                    date_modified = None
+
+                strings = [item["name"], date_created, date_modified, bytesToStr(item["size"])]
+
+                # emit a signal to add the item to the treeview.
+                # if no parent, then self.itemParent is None and the item will be added to the top level
+                # single-line if statement to handle the case where the item is a directory. if so, then set the collapsable argument to true
+                self.sUpdate.emit(FileExplorerItem(item["path"], True if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value else False, strings, item["size"], self.itemParent, None), self.itemParent)
 
 class FileExplorerManager(QObject):
     sDirectoryListingUpdate = pyqtSignal(FileExplorerItem, object)  # child, parent
@@ -82,6 +109,7 @@ class FileExplorerManager(QObject):
         self.view.fileViewer.itemExpanded.connect(self.fileViewerItemExpanded)
         self.view.fileViewer.itemClicked.connect(self.fileViewerItemClicked)
         self.view.deleteButton.clicked.connect(self.fileViewerDeleteButtonClicked)
+        self.view.downloadButton.clicked.connect(self.fileViewerDownloadButtonClicked)
         self.selection = None
         self.client = client
 
@@ -123,6 +151,11 @@ class FileExplorerManager(QObject):
     def fileViewerDeleteButtonClicked(self):
         threadPool = QThreadPool.globalInstance()
         threadPool.start(DirectoryDeletionAction(self.client, self.selection, self.sDirectoryListingUpdate, self.sClearDirectoryListing, self.sRemoveDirectoryListing))
+
+    def fileViewerDownloadButtonClicked(self):
+        if self.selection:
+            dialog = DUDialog.DownloadDialog(self.selection)
+            dialog.exec_()
 
     def fileViewerItemClicked(self, item):
         """

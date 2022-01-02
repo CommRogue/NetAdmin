@@ -5,11 +5,26 @@ from PyQt5.QtGui import QCloseEvent, QBrush, QColor
 from PyQt5.QtCore import pyqtSignal
 
 class FileExplorerItem(QTreeWidgetItem):
-    def __init__(self, text : str, path, collapsable, parent=None, styling=None):
+    def __init__(self, path, collapsable, strings, size=None, parent=None, styling=None):
+        self.size = size
+
+        # if passed less then 4 strings, fill with empty strings
+        while len(strings) < 4:
+            strings.append("")
+
+        # if passed more then 4 strings, take only the first 4 strings
+        strings = strings[:4]
+
+        # modify the strings we pass to the file explorer item so if we have a None, then we replace it with an empty string
+        strings = list(map(lambda name: str(name) if name is not None else "", strings))
+
+        # get str representation for the file size
+        self.sizeStr = strings[3]
+
         if parent:
-            super().__init__(type=1001, parent=parent, strings=[text])
+            super().__init__(parent, strings, 1001)
         else:
-            super().__init__([text], 1001)
+            super().__init__(strings, 1001)
         if collapsable:
             self.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
         else:
@@ -259,7 +274,10 @@ class ClientInspectorView(QMainWindow):
         self.verticalLayout_2.addWidget(self.groupBox)
         self.fileViewer = QtWidgets.QTreeWidget(self.FileExplorerTab)
         self.fileViewer.setObjectName("fileViewer")
-        self.fileViewer.header().setVisible(False)
+        self.fileViewer.header().setVisible(True)
+        self.fileViewer.header().setMinimumSectionSize(50)
+        self.fileViewer.header().setSortIndicatorShown(False)
+        self.fileViewer.header().setStretchLastSection(True)
         self.verticalLayout_2.addWidget(self.fileViewer)
         self.tabWidget.addTab(self.FileExplorerTab, "")
         self.verticalLayout_10.addWidget(self.tabWidget)
@@ -286,7 +304,7 @@ class ClientInspectorView(QMainWindow):
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi(ClientInspectionWindow)
-        self.tabWidget.setCurrentIndex(1)
+        self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(ClientInspectionWindow)
 
     def retranslateUi(self, ClientInspectionWindow):
@@ -314,6 +332,10 @@ class ClientInspectorView(QMainWindow):
         self.deleteButton.setText(_translate("ClientInspectionWindow", "Delete"))
         self.downloadButton.setText(_translate("ClientInspectionWindow", "Download"))
         self.pushButton.setText(_translate("ClientInspectionWindow", "PushButton"))
+        self.fileViewer.headerItem().setText(0, _translate("ClientInspectionWindow", "Name"))
+        self.fileViewer.headerItem().setText(1, _translate("ClientInspectionWindow", "Created"))
+        self.fileViewer.headerItem().setText(2, _translate("ClientInspectionWindow", "Last Modified"))
+        self.fileViewer.headerItem().setText(3, _translate("ClientInspectionWindow", "Size"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.FileExplorerTab),
                                   _translate("ClientInspectionWindow", "File Explorer"))
         self.menuFile.setTitle(_translate("ClientInspectionWindow", "File"))

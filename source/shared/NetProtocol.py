@@ -3,6 +3,7 @@ import orjson
 import typing
 import struct
 from enum import Enum
+import datetime
 
 
 class NetTypes(Enum):
@@ -52,12 +53,19 @@ class NetDirectoryItem:
     path: str
     itemtype: str
     styling: NetItemStyling
+    date_created: datetime.datetime
+    last_modified: datetime.datetime
+    size: int
 
-    def __init__(self, name: str, path: str, item_type, styling=None):
+
+    def __init__(self, name: str, path: str, item_type, date_created=None, last_modified=None, size=None, styling=None):
         self.name = name
         self.path = path
         self.itemtype = item_type
         self.icon = styling
+        self.date_created = date_created
+        self.last_modified = last_modified
+        self.size = size
 
 
 @dataclasses.dataclass
