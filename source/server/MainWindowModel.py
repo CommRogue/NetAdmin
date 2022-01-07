@@ -53,6 +53,62 @@ def threadpool_job_tracker(attr_str):
         return wrapper
     return decorator
 
+# class DataEvent(threading.Condition):
+#     '''
+#     An override of the threading.Event class that allows for the data to be stored in the event,
+#     so that it can be accessed by the thread that is waiting on the event to finish.
+#     '''
+#
+#     def __init__(self):
+#         super().__init__()
+#         self.data = None
+#
+#     @staticmethod
+#     def _acquire_lock(func):
+#         def wrapper(self, *args, **kwargs):
+#             with self:
+#                 func(*args, **kwargs)
+#         return wrapper
+#
+#     def wait(self, timeout = None) -> bool:
+#         with self:
+#             if timeout:
+#                 return super().wait(timeout)
+#             else:
+#                 return super().wait()
+#
+#     def set(self):
+#         """
+#         sets the event.
+#         """
+#         with self:
+#             super().notify_all()
+#
+#
+#     @_acquire_lock
+#     def set_data(self, data):
+#         """
+#         sets the event's data. may only be called once.
+#         Args:
+#             data: the data to be stored in the event
+#         """
+#         #check if there is no data already stored in the event
+#         if self.data == None:
+#             self.data = data
+#
+#         #if there is data already stored in the event, raise an exception
+#         else:
+#             raise Exception('Cannot reset data of a DataEvent object')
+#
+#     @_acquire_lock
+#     def get_data(self):
+#         """
+#         gets the event's data.
+#         Returns: the event's data.
+#
+#         """
+#         return self.data
+
 class DataEvent(threading.Event):
     '''
     An override of the threading.Event class that allows for the data to be stored in the event,

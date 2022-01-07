@@ -2,19 +2,26 @@ import os
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from InspectionWindowView import FileExplorerItem
+import DUDialogController
 
 
 class DownloadDialog(QtWidgets.QDialog):
-    def __init__(self, fileExplorerItem: FileExplorerItem):
+    def __init__(self, fileExplorerItem: FileExplorerItem, controller):
         super().__init__()
+        self.controller = controller
         self.fileExplorerItem = fileExplorerItem
         self.localDownloadDirectory = os.getcwd() + "\\Downloads"
         self.setupUi(self)
         self.custom()
 
+    def closeButtonClicked(self):
+        pass
+
     def custom(self):
-        self.buttonBox.addButton("Start Download", QtWidgets.QDialogButtonBox.YesRole)
-        self.buttonBox.addButton("Cancel", QtWidgets.QDialogButtonBox.RejectRole)
+        b1 = self.buttonBox.addButton("Start Download", QtWidgets.QDialogButtonBox.YesRole)
+        b1.connect(self.controller.on_downloadbutton_clicked)
+        b2 = self.buttonBox.addButton("Cancel", QtWidgets.QDialogButtonBox.RejectRole)
+        b2.connect(self.closeButtonClicked)
         self.remoteDirectoryText.setText(self.fileExplorerItem.path)
         self.downloadLocationText.setText(self.localDownloadDirectory)
         self.fileSizeText.setText(self.fileExplorerItem.sizeStr)

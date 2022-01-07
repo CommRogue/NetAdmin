@@ -33,6 +33,55 @@ def get_id():
     key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
     return winreg.QueryValue(key, 'UUID')
 
+def createServer(port):
+    """
+    Creates a server socket and binds it to the specified port.
+
+    Args:
+        port: the port to bind the server to.
+
+    Returns: the server socket.
+
+    """
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(('0.0.0.0', port))
+    server.listen(5)
+    return server
+
+def handleOpenConnection(server):
+    client, address = server.accept()
+    print("OpenConnection from: " + str(address))
+
+    # listener loop
+    while True:
+        # read message
+        size, message = NetProtocol.unpackFromSocket(client)
+        message = orjson.loads(message)  # convert the message to dictionary from json
+
+        id = message['id'] # get the echo id of the message, to echo back to the server when sending response
+
+
+        # if message is a request
+        if message['type'] == NetTypes.NetRequest.value:
+
+            # if the request is to download file
+            if message['data'] == NetTypes.NetDownloadFile.value:
+                # get the file directory
+                directory = message['extra']
+
+                # open file in bytes
+                file = open(directory, 'rb')
+
+                # get file size
+                size = os.path.getsize(directory)
+                client.send_message(NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(directory, size), id=id))
+                buffer = file.read(4096)
+                while buffer:
+                    client.send(buffer)
+                    buffer = file.read(4096)
+                file.close()
+
+
 def main():
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -115,6 +164,11 @@ def main():
                     DISK_LOAD=psutil.disk_usage('/')[3]
                 )
                 s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetSystemMetrics, sMessage, id=id)))
+
+            # if request to open a new connection
+            elif message['data'] == NetTypes.NetOpenConnection.value:
+                port = message['extra']['port']
+
 
             # if request a directory listing
             elif message['data'] == NetTypes.NetDirectoryListing.value:

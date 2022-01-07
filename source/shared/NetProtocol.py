@@ -16,7 +16,10 @@ class NetTypes(Enum):
     NetDirectoryFolderCollapsable = 6
     NetDirectoryFolderEmpty = 7
     NetDeleteFile = 8
-    NetStatus = 9
+    NetDownloadFile = 9
+    NetStatus = 10
+    NetDownloadFileDescriptor = 11
+    NetOpenConnection = 12
 
 
 class NetStatusTypes(Enum):
@@ -34,6 +37,9 @@ class NetDataStructure:
 class NetStatus:
     statusCode: int
 
+@dataclasses.dataclass
+class NetOpenConnection(NetDataStructure):
+    port: int
 
 @dataclasses.dataclass
 class NetItemStyling:
@@ -92,6 +98,15 @@ class NetMessage:
 class NetIdentification(NetDataStructure):
     id: str
 
+@dataclasses.dataclass
+class NetDownloadFileDescriptor(NetDataStructure):
+    directory: str
+    size: int
+    # buffer_size : int
+    # buffer_block_count : int
+
+class NetDownloadBlock(NetDataStructure):
+    data : bytes
 
 @dataclasses.dataclass
 class NetGeoInfo:
