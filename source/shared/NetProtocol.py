@@ -1,4 +1,6 @@
 import dataclasses
+import logging
+
 import orjson
 import typing
 import struct
@@ -159,12 +161,18 @@ class NetProtocol:
         try:
             # receive the message size as a 4 byte integer
             size = socket.recv(4)
-        except ConnectionError:
+            size = struct.unpack(">I", size)[0]
+            logging.info("Unpacked message size: %s" % size)
+        except ConnectionError or struct.error:
             return -1, -1
         else:
             if size:
-                size = struct.unpack(">I", size)[0]
-                data = socket.recv(size)
+                data = bytes()
+                iter = 0
+                while size != len(data):
+                    data += socket.recv(size-len(data))
+                    iter += 1
+                logging.info(f"Received message in {iter} iterations")
                 return size, data
             else:
                 return -1, -1

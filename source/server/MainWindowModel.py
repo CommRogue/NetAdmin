@@ -379,6 +379,7 @@ class MessageHandler(QRunnable):
 
         # lastly, check if the message is tracked by a thread
         # if so, then set the event, and optionally attach the data to it
+        logging.info(f"Message handler finished, attaching event data and notifying...")
         if self.message["id"] is not None and self.message["id"] in response_events: #check is message has response id and if it has an event associated with it
             UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
             if eventAttachedData is not None: #if there is data to attach to the event
@@ -425,10 +426,12 @@ class ClientConnectionHandler(QRunnable):
             response = urlopen("http://ipinfo.io/json")
         data = json.load(response)
         IP = data['ip']
-        org = data['org']
-        city = data['city']
-        country = data['country']
-        region = data['region']
+        try:
+            city = data['city']
+            country = data['country']
+        except:
+            city = "Unknown"
+            country = "Unknown"
 
         self.client.dataLock.acquire_write()
         self.client.geoInformation = NetGeoInfo(country, city, IP)
@@ -467,7 +470,7 @@ class ListenerWorker(QObject):
 
         threadPool = QThreadPool.globalInstance()
         self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listener_socket.bind(('0.0.0.0', 49152))
+        self.listener_socket.bind((socket.gethostbyname("0.0.0.0"), 49152))
         self.listener_socket.listen(5)
 
         while True:

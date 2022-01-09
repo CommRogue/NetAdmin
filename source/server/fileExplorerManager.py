@@ -62,8 +62,10 @@ class DirectoryListingAction(QRunnable):
         else: #if directory is the drives (root)
             #self.view.fileViewer.insertTopLevelItem(0, QTreeWidgetItem(["Loading..."]))
             path = "" #set the path to none to get root directory listing
+        logging.info("Sent message")
         event = self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDirectoryListing, id=None, extra=path), track_event=True)
         event.wait()
+        logging.info("Received message")
         data = event.get_data()
 
         if self.itemParent:  # if a directory, then clear the "Loading..." item or the previous items from the last click
@@ -73,6 +75,7 @@ class DirectoryListingAction(QRunnable):
             self.sUpdate.emit(FileExplorerItem(None, False, ["Access is denied to this directory...."], None, self.itemParent, NetErrorStyling), self.itemParent) #will send itemParent as none if there is no parent
         else:
             for item in data.items:
+                logging.info("item processing")
                 if item["date_created"]:
                     date_created = str(datetime.datetime.fromtimestamp(item["date_created"]))
                 else:
@@ -88,6 +91,7 @@ class DirectoryListingAction(QRunnable):
                 # if no parent, then self.itemParent is None and the item will be added to the top level
                 # single-line if statement to handle the case where the item is a directory. if so, then set the collapsable argument to true
                 self.sUpdate.emit(FileExplorerItem(item["path"], True if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value else False, strings, item["size"], self.itemParent, None), self.itemParent)
+        self.view.update()
 
 class FileExplorerManager(QObject):
     sDirectoryListingUpdate = pyqtSignal(FileExplorerItem, object)  # child, parent
@@ -134,8 +138,10 @@ class FileExplorerManager(QObject):
 
     def updateDirectoryListing(self, child : FileExplorerItem, parent: FileExplorerItem):
         if parent:
+            logging.info("inserting...")
             parent.insertChild(0, child)
         else:
+            logging.info("inserting...")
             self.view.fileViewer.insertTopLevelItem(0, child)
 
     def removeDirectoryListing(self, items : [FileExplorerItem]):
