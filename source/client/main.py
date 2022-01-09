@@ -99,7 +99,7 @@ def handleOpenConnection(server):
 def main():
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("127.0.0.1", 49152))
+    s.connect(("192.168.1.157", 49152))
 
     computer = wmi.WMI()
 
@@ -171,10 +171,14 @@ def main():
 
             # if request system metrics
             elif message['data'] == NetTypes.NetSystemMetrics.value:
+                try:
+                    GPU_LOAD = GPUtil.getGPUs()[0].load
+                except:
+                    GPU_LOAD = 0
                 sMessage = NetSystemMetrics(
                     psutil.cpu_percent(),
                     RAM_LOAD=psutil.virtual_memory().percent,
-                    GPU_LOAD=GPUtil.getGPUs()[0].load,
+                    GPU_LOAD=GPU_LOAD,
                     DISK_LOAD=psutil.disk_usage('/')[3]
                 )
                 s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetSystemMetrics, sMessage, id=id)))
