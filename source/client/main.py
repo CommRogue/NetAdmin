@@ -33,9 +33,9 @@ def get_id():
     key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
     return winreg.QueryValue(key, 'UUID')
 
-def createServer(port):
+def createServer(port=0):
     """
-    Creates a server socket and binds it to the specified port.
+    Creates a server socket and binds it to the specified port. If no port is specified, the socket will be bound to an available port.
 
     Args:
         port: the port to bind the server to.
@@ -56,6 +56,10 @@ def handleOpenConnection(server):
     while True:
         # read message
         size, message = NetProtocol.unpackFromSocket(client)
+        if size == -1:
+            # if server disconnected, close local open connection server
+            server.shutdown(socket.SHUT_RDWR)
+            break
         message = orjson.loads(message)  # convert the message to dictionary from json
 
         id = message['id'] # get the echo id of the message, to echo back to the server when sending response
@@ -63,6 +67,11 @@ def handleOpenConnection(server):
 
         # if message is a request
         if message['type'] == NetTypes.NetRequest.value:
+            # if the request is to close the connection
+            if message['data'] == NetTypes.NetCloseConnection.value:
+                print(f"Closing unmanaged connection {address}")
+                server.close()
+                break
 
             # if the request is to download file
             if message['data'] == NetTypes.NetDownloadFile.value:
@@ -74,7 +83,12 @@ def handleOpenConnection(server):
 
                 # get file size
                 size = os.path.getsize(directory)
-                client.send_message(NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(directory, size), id=id))
+                # get file name from directory
+                name = os.path.basename(directory)
+                # send file descriptor
+                client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(name, size), id=id)))
+
+                # read file and send
                 buffer = file.read(4096)
                 while buffer:
                     client.send(buffer)
@@ -167,8 +181,11 @@ def main():
 
             # if request to open a new connection
             elif message['data'] == NetTypes.NetOpenConnection.value:
-                port = message['extra']['port']
-
+                # create a server with the port specified in extra, and pass it to handleOpenConnection
+                server = createServer()
+                thread = threading.Thread(target=handleOpenConnection, args=(server,))
+                thread.start()
+                s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value), extra=server.getsockname()[1], id=id)))
 
             # if request a directory listing
             elif message['data'] == NetTypes.NetDirectoryListing.value:

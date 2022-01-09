@@ -20,7 +20,7 @@ class NetTypes(Enum):
     NetStatus = 10
     NetDownloadFileDescriptor = 11
     NetOpenConnection = 12
-
+    NetCloseConnection = 13
 
 class NetStatusTypes(Enum):
     NetOK = 0
@@ -100,7 +100,7 @@ class NetIdentification(NetDataStructure):
 
 @dataclasses.dataclass
 class NetDownloadFileDescriptor(NetDataStructure):
-    directory: str
+    name: str
     size: int
     # buffer_size : int
     # buffer_block_count : int

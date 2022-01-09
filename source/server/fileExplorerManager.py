@@ -1,4 +1,7 @@
 from PyQt5.QtCore import *
+
+from DUDialogController import DUDialogController
+from DUDialogModel import DUDialogModel
 from InspectionWindowController import *
 from source.server.InspectionWindowView import FileExplorerItem
 import logging
@@ -24,24 +27,24 @@ def bytesToStr(size : int):
     return size
 
 class DirectoryDeletionAction(QRunnable):
-    def __init__(self, client, selection, sUpdate, sClear, sRemove):
+    def __init__(self, client, selections, sUpdate, sClear, sRemove):
         super().__init__()
         self.client = client
-        self.selection = selection
+        self.selections = selections
         self.sUpdate = sUpdate
         self.sClear = sClear
         self.sRemove = sRemove
 
 
     def run(self):
-        if self.selection:
-            event = self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDeleteFile, extra=self.selection.path), track_event=True)
-            result = event.wait(15)
-            if result:
-                data = event.get_data()
-                if isinstance(data, NetStatus) and data.statusCode == NetStatusTypes.NetOK.value:
-                    self.sRemove.emit(self.selection)
-
+        if self.selections:
+            for selection in self.selections:
+                event = self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDeleteFile, extra=selection.path), track_event=True)
+                result = event.wait(15) # do default 10 seconds for event.wait
+                if result:
+                    data = event.get_data()
+                    if isinstance(data, NetStatus) and data.statusCode == NetStatusTypes.NetOK.value:
+                        self.sRemove.emit(selection)
 
 class DirectoryListingAction(QRunnable):
     def __init__(self, client, view, sUpdate, sClear, itemParent=None):
@@ -107,10 +110,10 @@ class FileExplorerManager(QObject):
         self.sDirectoryListingUpdate.connect(self.updateDirectoryListing)
         self.sRemoveDirectoryListing.connect(self.removeDirectoryListing)
         self.view.fileViewer.itemExpanded.connect(self.fileViewerItemExpanded)
-        self.view.fileViewer.itemClicked.connect(self.fileViewerItemClicked)
+        self.view.fileViewer.itemSelectionChanged.connect(self.fileViewerSelectionChanged)
         self.view.deleteButton.clicked.connect(self.fileViewerDeleteButtonClicked)
         self.view.downloadButton.clicked.connect(self.fileViewerDownloadButtonClicked)
-        self.selection = None
+        self.selections = None
         self.client = client
 
     def initializeContents(self):
@@ -135,12 +138,14 @@ class FileExplorerManager(QObject):
         else:
             self.view.fileViewer.insertTopLevelItem(0, child)
 
-    def removeDirectoryListing(self, child : FileExplorerItem):
-        if child == self.selection:
-            self.selection = None
-            self.view.fileViewer.selectionModel().clearSelection()
-        if child.parent():
-            child.parent().removeChild(child)
+    def removeDirectoryListing(self, items : [FileExplorerItem]):
+        # clear current selection
+        self.selections = None
+        self.view.fileViewer.selectionModel().clearSelection()
+        # remove the items from the treeview
+        for item in items:
+            if items.parent():
+                item.parent().removeChild(item)
 
 
     # signal-response functions
@@ -150,18 +155,24 @@ class FileExplorerManager(QObject):
 
     def fileViewerDeleteButtonClicked(self):
         threadPool = QThreadPool.globalInstance()
-        threadPool.start(DirectoryDeletionAction(self.client, self.selection, self.sDirectoryListingUpdate, self.sClearDirectoryListing, self.sRemoveDirectoryListing))
+        threadPool.start(DirectoryDeletionAction(self.client, self.selections, self.sDirectoryListingUpdate, self.sClearDirectoryListing, self.sRemoveDirectoryListing))
 
     def fileViewerDownloadButtonClicked(self):
-        if self.selection:
-            dialog = DUDialog.DownloadDialog(self.selection)
-            dialog.exec_()
+        if self.selections:
+            DUController = DUDialogController(self.selections)
+            DUView = DUDialog.DownloadDialog(DUController)
+            DUModel = DUDialogModel(DUController, self.client)
+            # connect the view and the model to the controller
+            DUController.set_view(DUView)
+            DUController.set_model(DUModel)
 
-    def fileViewerItemClicked(self, item):
+            DUView.exec_()
+
+    def fileViewerSelectionChanged(self):
         """
         Responds to the selection (click) of a file in the file explorer.
         Args:
             item: passed by Qt.
         """
         logging.debug("File explorer item changed.")
-        self.selection = item
+        self.selections = self.view.fileViewer.selectedItems()

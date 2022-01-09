@@ -118,17 +118,18 @@ class DataEvent(threading.Event):
     def __init__(self):
         super().__init__()
         self.data = None
+        self.extra = None
 
-    def set_data(self, data):
+    def set_data(self, data, extra=None):
         """
         sets the event's data. may only be called once.
         Args:
             data: the data to be stored in the event
         """
         #check if there is no data already stored in the event
+        self.extra = extra
         if self.data == None:
             self.data = data
-
         #if there is data already stored in the event, raise an exception
         else:
             raise Exception('Cannot reset data of a DataEvent object')
@@ -140,6 +141,14 @@ class DataEvent(threading.Event):
 
         """
         return self.data
+
+    def get_extra(self):
+        """
+        gets the event's extra data.
+        Returns: the event's extra data.
+
+        """
+        return self.extra
 
 class Client(QObject):
     #synchronization objects
@@ -370,10 +379,10 @@ class MessageHandler(QRunnable):
 
         # lastly, check if the message is tracked by a thread
         # if so, then set the event, and optionally attach the data to it
-        if self.message["id"] is not None: #check is message has response id
+        if self.message["id"] is not None and self.message["id"] in response_events: #check is message has response id and if it has an event associated with it
             UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
             if eventAttachedData is not None: #if there is data to attach to the event
-                response_events[self.message["id"]].set_data(eventAttachedData)
+                response_events[self.message["id"]].set_data(eventAttachedData, self.message["extra"])
             response_events[self.message["id"]].set() #set the event to notify the waiting thread
             response_events.pop(self.message["id"]) #remove the event from the response events
 

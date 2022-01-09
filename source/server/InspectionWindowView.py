@@ -25,6 +25,7 @@ class FileExplorerItem(QTreeWidgetItem):
             super().__init__(parent, strings, 1001)
         else:
             super().__init__(strings, 1001)
+        self.collapsable = collapsable
         if collapsable:
             self.setChildIndicatorPolicy(QTreeWidgetItem.ShowIndicator)
         else:
@@ -278,6 +279,7 @@ class ClientInspectorView(QMainWindow):
         self.fileViewer.header().setMinimumSectionSize(50)
         self.fileViewer.header().setSortIndicatorShown(False)
         self.fileViewer.header().setStretchLastSection(True)
+        self.fileViewer.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
         self.verticalLayout_2.addWidget(self.fileViewer)
         self.tabWidget.addTab(self.FileExplorerTab, "")
         self.verticalLayout_10.addWidget(self.tabWidget)
