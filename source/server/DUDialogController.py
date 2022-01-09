@@ -5,19 +5,35 @@ from PyQt5.QtWidgets import QMessageBox, QFileDialog
 import DUDialog
 from PyQt5.QtCore import pyqtSignal, QObject
 
+import fileExplorerManager
+
+
 class DUDialogController(QObject):
     download_progress_signal = pyqtSignal(int)
     def __init__(self, fileExplorerItems, view=None, model=None):
         super().__init__()
         self.fileExplorerItems = fileExplorerItems
+        self.totalSize = 0
+        for item in fileExplorerItems:
+            if item.size:
+                self.totalSize += item.size
+        self.totalSizeStr = fileExplorerManager.bytesToStr(self.totalSize)
         if len(fileExplorerItems) > 1:
             self.itemsString = f"{len(fileExplorerItems)} items"
-            self.totalSize = 0
-            for item in fileExplorerItems:
-                self.totalSize += DUDialogController.calculate_size(item)
         else:
             self.itemsString = fileExplorerItems[0].path
-            self.totalSize = DUDialogController.calculate_size(fileExplorerItems[0])
+        self.totalSizeStr = str(self.totalSizeStr)
+
+        # if len(fileExplorerItems) > 1:
+        #     self.itemsString = f"{len(fileExplorerItems)} items"
+        #     self.totalSize = 0
+        #     for item in fileExplorerItems:
+        #         self.totalSize += DUDialogController.calculate_size(item)
+        #     self.totalSizeStr = fileExplorerManager.bytesToStr(self.totalSize)
+        # else:
+        #     self.itemsString = fileExplorerItems[0].path
+        #     self.totalSize = DUDialogController.calculate_size(fileExplorerItems[0])
+        #     self.totalSizeStr = fileExplorerManager.bytesToStr(self.totalSize)
         self.view = view
         self.model = model
         self.view = view
@@ -53,7 +69,7 @@ class DUDialogController(QObject):
 
         self.view.remoteDirectoryText.setText(self.itemsString)
         self.view.downloadLocationText.setText(self.localDownloadDirectory)
-        self.view.fileSizeText.setText(self.totalSize)
+        self.view.fileSizeText.setText(self.totalSizeStr)
         self.view.downloadTimeText.setText(f"{round(self.totalSize / 2500000, 2)}s")
 
 
@@ -66,7 +82,7 @@ class DUDialogController(QObject):
             dialog.exec_()
             self.view.close()
         self.bytes_downloaded += bytes_read
-        self.view.update_progress_bar(round(self.bytes_downloaded/self.totalSize, 2)*100)
+        self.view.update_progress_bar(min(round(self.bytes_downloaded/self.totalSize, 2)*100, 100))
 
     def set_model(self, model):
         """
@@ -84,13 +100,15 @@ class DUDialogController(QObject):
         localdir = self.localDownloadDirectory
 
         # get remote directory from view
-        remotedirs = []
-        # iterate over the file explorer items and check if they are collpasable. if so, then add all their children to the list
-        for item in self.fileExplorerItems:
-            self.resolveChildren(remotedirs, item, item.path)
+        remotedirs = self.fileExplorerItems
+        remotedirs = map(lambda x: x.path, remotedirs)
+
+        #-- # iterate over the file explorer items and check if they are collpasable. if so, then add all their children to the list
+        #-- for item in self.fileExplorerItems:
+        #--     self.resolveChildren(remotedirs, item, item.path)
 
         # download file
-        self.model.download_file(localdir, remotedirs, self.download_progress_signal)
+        self.model.download_files(localdir, remotedirs, self.download_progress_signal)
 
     @staticmethod
     def resolveChildren(clist, item, base_path):

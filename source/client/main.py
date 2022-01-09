@@ -4,6 +4,7 @@ import os
 import orjson
 import sys
 import platform
+import win32com.client as com
 import wmi
 sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
 from NetProtocol import *
@@ -48,6 +49,42 @@ def createServer(port=0):
     server.listen(5)
     return server
 
+def sendfile(directory, socket):
+    try:
+        file = open(directory, 'rb')
+    except:
+        socket.send(NetProtocol.packNetMessage(
+            NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value), extra=directory)))
+    else:
+        # get file size
+        size = os.path.getsize(directory)
+        # get file name from directory
+        name = os.path.basename(directory)
+        # send file descriptor
+        socket.send(NetProtocol.packNetMessage(
+            NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(directory, size))))
+
+        # read file and send
+        buffer = file.read(4096)
+        while buffer:
+            socket.send(buffer)
+            buffer = file.read(4096)
+        file.close()
+
+def sendallfiles(socket, dir):
+    if os.path.islink(dir):
+        return
+    if os.path.isfile(dir):
+        sendfile(dir, socket)
+    else:
+        try:
+            for item in os.scandir(dir):
+                sendallfiles(socket, os.path.join(dir, item.name))
+        except:
+            socket.send(NetProtocol.packNetMessage(
+                NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value),
+                           extra=dir)))
+
 def handleOpenConnection(server):
     client, address = server.accept()
     print("OpenConnection from: " + str(address))
@@ -78,23 +115,11 @@ def handleOpenConnection(server):
                 # get the file directory
                 directory = message['extra']
 
-                # open file in bytes
-                file = open(directory, 'rb')
+                # send all files
+                sendallfiles(client, directory)
 
-                # get file size
-                size = os.path.getsize(directory)
-                # get file name from directory
-                name = os.path.basename(directory)
-                # send file descriptor
-                client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(name, size), id=id)))
-
-                # read file and send
-                buffer = file.read(4096)
-                while buffer:
-                    client.send(buffer)
-                    buffer = file.read(4096)
-                file.close()
-
+                # send file download end status
+                client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value))))
 
 def main():
     # create a socket
@@ -224,7 +249,14 @@ def main():
 
                         # append NetDirectoryItems for each file/folder
                         for folder in folders:
-                            sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable, date_created=os.path.getctime(directory+folder+"\\")))
+                            try:
+                                winfolderPath = directory+folder+"\\"
+                                winfso = com.Dispatch("Scripting.FileSystemObject")
+                                winfolder = winfso.GetFolder(winfolderPath)
+                                size = winfolder.Size
+                            except:
+                                size = None
+                            sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable, date_created=os.path.getctime(directory+folder+"\\"), size=size))
                         for file in files:
                             sMessage.items.append(NetDirectoryItem(file, directory+file, NetTypes.NetDirectoryFile.value, date_created=os.path.getctime(directory+file), last_modified=os.path.getmtime(directory+file), size=os.path.getsize(directory+file)))
                         s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))

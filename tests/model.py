@@ -1,7 +1,7 @@
-class CalcModel:
-    @staticmethod
-    def evaluateExpression(exp):
-        try:
-            return str(eval(exp))
-        except Exception as e:
-            return "Error while evaluating expression. Check syntax and try again...."
+import os
+
+path = "C:\\Program Files\\Adobe\\Common\\Plug-ins\\7.0\\MediaCore"
+
+with os.scandir(path) as it:
+    for entry in it:
+        print(entry.name)

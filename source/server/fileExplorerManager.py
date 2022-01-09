@@ -85,7 +85,9 @@ class DirectoryListingAction(QRunnable):
                 else:
                     date_modified = None
 
-                strings = [item["name"], date_created, date_modified, bytesToStr(item["size"])]
+                strings = [item["name"], date_created, date_modified]
+                if item["size"] != 0:
+                    strings.append(bytesToStr(item["size"]))
 
                 # emit a signal to add the item to the treeview.
                 # if no parent, then self.itemParent is None and the item will be added to the top level

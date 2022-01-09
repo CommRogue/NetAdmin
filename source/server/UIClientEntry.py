@@ -31,33 +31,39 @@ class UIClientEntry:
         self._status_field.setText("Disconnected")
 
     def setStatus(self, status):
+        row = self._status_field.row()
         newStatus = QTableWidgetItem(status)
-        self.table.setItem(self.table.rowCount() - 1, 0, newStatus)
+        self.table.setItem(row, 0, newStatus)
         self._status_field = newStatus
 
     def setAddress(self, address):
+        row = self._address_field.row()
         newAddress = QTableWidgetItem(address)
-        self.table.setItem(self.table.rowCount() - 1, 1, newAddress)
+        self.table.setItem(row, 1, newAddress)
         self._address_field = newAddress
 
     def setCountry(self, country):
+        row = self._country_field.row()
         newCountry = QTableWidgetItem(country)
-        self.table.setItem(self.table.rowCount() - 1, 2, newCountry)
+        self.table.setItem(row, 2, newCountry)
         self._country_field = newCountry
 
     def setName(self, name):
+        row = self._name_field.row()
         newName = QTableWidgetItem(name)
-        self.table.setItem(self.table.rowCount() - 1, 3, newName)
+        self.table.setItem(row, 3, newName)
         self._name_field = newName
 
     def setLatency(self, latency):
+        row = self._latency_field.row()
         newLatency = QTableWidgetItem(latency)
-        self.table.setItem(self.table.rowCount() - 1, 4, newLatency)
+        self.table.setItem(row, 4, newLatency)
         self._latency_field = newLatency
 
     def setIdentifier(self, identifier):
+        row = self._uuid_field.row()
         newIdentifier = QTableWidgetItem(identifier)
-        self.table.setItem(self.table.rowCount() - 1, 5, newIdentifier)
+        self.table.setItem(row, 5, newIdentifier)
         self._uuid_field = newIdentifier
 
     def getStatus(self):

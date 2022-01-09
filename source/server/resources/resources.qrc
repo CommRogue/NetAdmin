@@ -1,6 +1,7 @@
-<!DOCTYPE RCC><RCC version="1.0">
-<qresource>
+<RCC>
+  <qresource>
+    <file>images/loading-934433.png</file>
     <file alias="deleteIcon">images/delete.png</file>
     <file alias="openIcon">images/open.png</file>
-</qresource>
+  </qresource>
 </RCC>

@@ -29,6 +29,7 @@ class NetStatusTypes(Enum):
     NetDirectoryAccessDenied = 1
     NetInvalidIdentification = 2
     NetFileNotFound = 3
+    NetDownloadFinished = 4
 
 
 class NetDataStructure:
@@ -102,7 +103,7 @@ class NetIdentification(NetDataStructure):
 
 @dataclasses.dataclass
 class NetDownloadFileDescriptor(NetDataStructure):
-    name: str
+    directory: str
     size: int
     # buffer_size : int
     # buffer_block_count : int
