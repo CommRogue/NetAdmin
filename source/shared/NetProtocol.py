@@ -154,6 +154,7 @@ class NetProtocol:
     def packNetMessage(data: NetMessage):
         data = NetProtocol.serialize(data)
         data = struct.pack(">I", len(data)) + data
+        print(f"data size is {len(data)}")
         return data
 
     @staticmethod
@@ -176,8 +177,3 @@ class NetProtocol:
                 return size, data
             else:
                 return -1, -1
-
-    @staticmethod
-    @messagePacker
-    def heartbeat():
-        pass
