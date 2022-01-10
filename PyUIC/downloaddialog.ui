@@ -29,7 +29,7 @@
       </sizepolicy>
      </property>
      <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:14pt; font-weight:600;&quot;&gt;Download Item/s&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:14pt; font-weight:600;&quot;&gt;Upload Item/s&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
     </widget>
    </item>
@@ -57,7 +57,7 @@
      <item>
       <widget class="QLabel" name="label_2">
        <property name="text">
-        <string>Remote file or directory to download</string>
+        <string>Remote file or directory to upload</string>
        </property>
       </widget>
      </item>
@@ -68,6 +68,13 @@
        </property>
       </widget>
      </item>
+     <item>
+      <widget class="QToolButton" name="chooseDirectoryButton">
+       <property name="text">
+        <string>...</string>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>
@@ -75,7 +82,7 @@
      <item>
       <widget class="QLabel" name="label">
        <property name="text">
-        <string>Location to download to</string>
+        <string>Location to upload to</string>
        </property>
       </widget>
      </item>
@@ -83,13 +90,6 @@
       <widget class="QLineEdit" name="downloadLocationText">
        <property name="readOnly">
         <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QToolButton" name="chooseDirectoryButton">
-       <property name="text">
-        <string>...</string>
        </property>
       </widget>
      </item>
@@ -120,7 +120,7 @@
      <item>
       <widget class="QLabel" name="downloadTimeLabel">
        <property name="text">
-        <string>Estimated time to download (20 mb/s):</string>
+        <string>Estimated time to upload (5 mb/s):</string>
        </property>
       </widget>
      </item>

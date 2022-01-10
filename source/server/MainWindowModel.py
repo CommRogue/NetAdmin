@@ -207,11 +207,9 @@ class Client(QObject):
             response_events[id] = DataEvent()
             data.id = id #send the id to the client so it can copy it
             self._message_queue.put(NetProtocol.packNetMessage(data))
-            logging.debug(f"Sending message {data}")
             return response_events[id]
         else:
             self._message_queue.put(NetProtocol.packNetMessage(data))
-            logging.debug(f"Sending message {data}")
 
 class DatabaseHelpers:
     @staticmethod
@@ -294,7 +292,10 @@ class MessageHandler(QRunnable):
 
         # unpack the message from bytes (done here so unpacking is done by the thread and not the communicator)
         self.message = orjson.loads(self._message_bytes)
-        logging.debug(f"MessageHandler running with message {self.message} from client {self.client.address}")
+        str = f"{self.client.address} MessageHandler running with message {NetTypes(self.message['type'])}"
+        if self.message['type'] == NetTypes.NetStatus.value:
+            str += f", {NetStatusTypes(self.message['data']['statusCode'])}"
+        logging.debug(str)
 
 
         # --- start of message handling ---
@@ -304,8 +305,6 @@ class MessageHandler(QRunnable):
 
         # if client sent an status code
         elif self.message["type"] == NetTypes.NetStatus.value:
-            logging.error(f"Status code from client {self.client.address}: {self.message['data']}")
-
             # set the event data to the status message
             datastructure = NetStatus(**self.message['data']) # 'data' field contains a NetError instance
             eventAttachedData = datastructure
@@ -379,7 +378,6 @@ class MessageHandler(QRunnable):
 
         # lastly, check if the message is tracked by a thread
         # if so, then set the event, and optionally attach the data to it
-        logging.info(f"Message handler finished, attaching event data and notifying...")
         if self.message["id"] is not None and self.message["id"] in response_events: #check is message has response id and if it has an event associated with it
             UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
             if eventAttachedData is not None: #if there is data to attach to the event
@@ -510,6 +508,7 @@ class ListenerWorker(QObject):
                 if not s._closed and not clients[s]._message_queue.empty():
                     message = clients[s]._message_queue.get_nowait()
                     if(type(message) is bytes):
+                        logging.debug(f"Sending message {message}")
                         s.send(message)
                     else:
                         logging.error(f"Received non-bytes message on message-queue of {clients[s].address}")

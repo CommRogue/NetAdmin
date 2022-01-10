@@ -39,9 +39,7 @@ class ClientInspectorController(QObject):
     def requestMetrics(self, client, shownEvent : threading.Event, tabEvent : threading.Event):
         while shownEvent.wait() and tabEvent.wait():
             event = client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetSystemMetrics), track_event=True)
-            print("sent request, waiting for response")
             event.wait()
-            print("got response")
             time.sleep(0.5)
 
     def __init__(self, view, client):

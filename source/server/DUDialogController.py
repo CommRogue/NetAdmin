@@ -1,15 +1,20 @@
 import os
+import threading
 
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
 
 import DUDialog
 from PyQt5.QtCore import pyqtSignal, QObject
 
+import GUIHelpers
 import fileExplorerManager
 
+# class DUDialogController(QObject):
+#     du_progress_signal = pyqtSignal(int)
+#     def __init__(self, parent=None):
 
 class DUDialogController(QObject):
-    download_progress_signal = pyqtSignal(int)
+    du_progress_signal = pyqtSignal(int)
     def __init__(self, fileExplorerItems, view=None, model=None):
         super().__init__()
         self.fileExplorerItems = fileExplorerItems
@@ -38,13 +43,13 @@ class DUDialogController(QObject):
         self.model = model
         self.view = view
         self.bytes_downloaded = 0
-        self.download_progress_signal.connect(self.on_download_progress)
+        self.du_progress_signal.connect(self.on_download_progress)
         self.localDownloadDirectory = os.getcwd() + "\\Downloads"
 
     @staticmethod
     def calculate_size(item):
         """
-        Calculates the size of a given item.
+        Calculates the size of a given item from the file viewer.
         Args:
             item: the item to calculate the size of.
         """
@@ -74,15 +79,17 @@ class DUDialogController(QObject):
 
 
     def on_download_progress(self, bytes_read):
-        if bytes_read == -1:
-            dialog = QMessageBox()
-            dialog.setText(f'The download of "{self.itemsString}" has finished. \n It can be located at "{self.localDownloadDirectory}"')
-            dialog.setWindowTitle("Download finished")
-            dialog.setStandardButtons(QMessageBox.Ok)
-            dialog.exec_()
+        if bytes_read == -2:
+            GUIHelpers.infobox("Download Cancelled",
+                               "Download request was cancelled by the user. All partially downloaded files were deleted.")
+            # don't have to close since closeButtonClicked will close the window
+        elif bytes_read == -1:
+            GUIHelpers.infobox("Download finished",
+                               f'The download of "{self.itemsString}" has finished. \n It can be located at "{self.localDownloadDirectory}"')
             self.view.close()
-        self.bytes_downloaded += bytes_read
-        self.view.update_progress_bar(min(round(self.bytes_downloaded/self.totalSize, 2)*100, 100))
+        else:
+            self.bytes_downloaded += bytes_read
+            self.view.update_progress_bar(min(round(self.bytes_downloaded/self.totalSize, 2)*100, 100))
 
     def set_model(self, model):
         """
@@ -91,6 +98,10 @@ class DUDialogController(QObject):
             model: the model of the controller.
         """
         self.model = model
+
+    def closeButtonClicked(self):
+        self.model.cancel_download()
+        self.view.close()
 
     def on_downloadbutton_clicked(self):
         """
@@ -108,7 +119,8 @@ class DUDialogController(QObject):
         #--     self.resolveChildren(remotedirs, item, item.path)
 
         # download file
-        self.model.download_files(localdir, remotedirs, self.download_progress_signal)
+        download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal))
+        download_thread.start()
 
     @staticmethod
     def resolveChildren(clist, item, base_path):

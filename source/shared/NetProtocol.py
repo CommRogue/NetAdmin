@@ -35,7 +35,6 @@ class NetStatusTypes(Enum):
 class NetDataStructure:
     pass
 
-
 @dataclasses.dataclass
 class NetStatus:
     statusCode: int
@@ -155,7 +154,7 @@ class NetProtocol:
     def packNetMessage(data: NetMessage):
         data = NetProtocol.serialize(data)
         data = struct.pack(">I", len(data)) + data
-        print(f"data size is {len(data)}")
+        logging.info(f"data size is {len(data)}")
         return data
 
     @staticmethod

@@ -12,9 +12,6 @@ class DownloadDialog(QtWidgets.QDialog):
         self.setupUi(self)
         self.custom()
 
-    def closeButtonClicked(self):
-        self.close()
-
     def update_progress_bar(self, value):
         self.downloadProgressBar.setValue(int(value))
 
@@ -22,7 +19,7 @@ class DownloadDialog(QtWidgets.QDialog):
         b1 = self.buttonBox.addButton("Start Download", QtWidgets.QDialogButtonBox.YesRole)
         b1.clicked.connect(self.controller.on_downloadbutton_clicked)
         b2 = self.buttonBox.addButton("Cancel", QtWidgets.QDialogButtonBox.RejectRole)
-        b2.clicked.connect(self.closeButtonClicked)
+        b2.clicked.connect(self.controller.closeButtonClicked)
         self.chooseDirectoryButton.clicked.connect(self.controller.choose_locationClicked)
         # self.remoteDirectoryText.setText(self.fileExplorerItem.path)
         # self.downloadLocationText.setText(self.localDownloadDirectory)

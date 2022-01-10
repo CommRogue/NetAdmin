@@ -14,6 +14,7 @@ import winreg
 import win32api
 from os import listdir
 from os.path import isfile, join
+from OpenConnectionHelpers import *
 
 def set_id(id):
     """
@@ -49,82 +50,49 @@ def createServer(port=0):
     server.listen(5)
     return server
 
-def sendfile(directory, socket):
-    try:
-        file = open(directory, 'rb')
-    except:
-        socket.send(NetProtocol.packNetMessage(
-            NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value), extra=directory)))
-    else:
-        # get file size
-        size = os.path.getsize(directory)
-        # get file name from directory
-        name = os.path.basename(directory)
-        # send file descriptor
-        socket.send(NetProtocol.packNetMessage(
-            NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(directory, size))))
-
-        # read file and send
-        buffer = file.read(4096)
-        while buffer:
-            socket.send(buffer)
-            buffer = file.read(4096)
-        file.close()
-
-def sendallfiles(socket, dir):
-    if os.path.islink(dir):
-        return
-    if os.path.isfile(dir):
-        sendfile(dir, socket)
-    else:
-        try:
-            for item in os.scandir(dir):
-                sendallfiles(socket, os.path.join(dir, item.name))
-        except:
-            socket.send(NetProtocol.packNetMessage(
-                NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value),
-                           extra=dir)))
-
 def handleOpenConnection(server):
-    client, address = server.accept()
-    print("OpenConnection from: " + str(address))
+    try:
+        client, address = server.accept()
+        print("OpenConnection from: " + str(address))
 
-    # listener loop
-    while True:
-        # read message
-        size, message = NetProtocol.unpackFromSocket(client)
-        if size == -1:
-            # if server disconnected, close local open connection server
-            server.shutdown(socket.SHUT_RDWR)
-            break
-        message = orjson.loads(message)  # convert the message to dictionary from json
-
-        id = message['id'] # get the echo id of the message, to echo back to the server when sending response
-
-
-        # if message is a request
-        if message['type'] == NetTypes.NetRequest.value:
-            # if the request is to close the connection
-            if message['data'] == NetTypes.NetCloseConnection.value:
-                print(f"Closing unmanaged connection {address}")
-                server.close()
+        # listener loop
+        while True:
+            # read message
+            size, message = NetProtocol.unpackFromSocket(client)
+            if size == -1:
+                # if server disconnected, close local open connection server
+                server.shutdown(socket.SHUT_RDWR)
                 break
+            message = orjson.loads(message)  # convert the message to dictionary from json
 
-            # if the request is to download file
-            if message['data'] == NetTypes.NetDownloadFile.value:
-                # get the file directory
-                directory = message['extra']
+            id = message['id'] # get the echo id of the message, to echo back to the server when sending response
 
-                # send all files
-                sendallfiles(client, directory)
+            # if message is a request
+            if message['type'] == NetTypes.NetRequest.value:
+                # if the request is to close the connection
+                if message['data'] == NetTypes.NetCloseConnection.value:
+                    print(f"Closing unmanaged connection {address}")
+                    server.close()
+                    break
 
-                # send file download end status
-                client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value))))
+                # if the request is to download file
+                if message['data'] == NetTypes.NetDownloadFile.value:
+                    # get the file directory
+                    directory = message['extra']
+
+                    # send all files
+                    sendallfiles(client, directory)
+
+                    # send file download end status
+                    client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value))))
+    except ConnectionResetError:
+        print("Connection disconnected by server without message")
+
 
 def main():
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("192.168.1.157", 49152))
+    s.connect(("127.0.0.1", 49152))
 
     computer = wmi.WMI()
 
