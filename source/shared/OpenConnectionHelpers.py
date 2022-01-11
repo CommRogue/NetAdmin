@@ -1,6 +1,29 @@
+import socket
+import typing
+
+import orjson
+
+import MainWindowModel
 from NetProtocol import *
 import os
 from PyQt5.QtCore import pyqtSignal
+import threading
+
+from NetProtocol import NetMessage, NetTypes, NetStatus, NetStatusTypes, NetProtocol
+
+
+class SharedBoolean:
+    def __init__(self, init_value):
+        self._data = init_value
+        self._lock = threading.Lock()
+
+    def __bool__(self):
+        with self._lock:
+            return self._data
+
+    def set(self, value):
+        with self._lock:
+            self._data = value
 
 def verify_dir(dir):
     """
@@ -135,3 +158,46 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
     else:
         logging.info("Receive of 1 item succeeded.")
         return True, excludedCount, pathlist
+
+
+def open_connection(client : typing.Union[MainWindowModel.Client, socket.socket]):
+    """
+    Opens a new socket to the client or socket passed in.
+    Args:
+        client: a MainWindowModel.Client or socket.socket object.
+
+    Returns: socket of the new connection.
+    """
+    # if passed in MainWindowModel.Client
+    if isinstance(client, MainWindowModel.Client):
+        # send open connection request
+        event = client.send_message(NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value), track_event=True)
+        # wait for response and get data from it
+        event.wait()
+        data = event.get_data()
+        extra = event.get_extra()
+
+        # if response is ok
+        if type(data) is NetStatus:
+            if data.statusCode == NetStatusTypes.NetOK.value:
+                # connect to client using new socket
+                ocSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                ocSocket.connect((client.address[0], int(extra)))
+                return ocSocket
+
+    if isinstance(client, socket.socket):
+        # send open connection request
+        client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value)))
+
+        # wait for response and get data from it
+        size, message = NetProtocol.unpackFromSocket(client)
+        message = orjson.loads(message)
+        data = message["data"]
+        extra = message["extra"]
+
+        # if response is ok
+        if data == NetStatusTypes.NetOK.value:
+            # connect to client using new socket
+            ocSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ocSocket.connect((client.getpeername()[0], int(extra)))
+            return ocSocket

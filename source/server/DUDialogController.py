@@ -13,10 +13,10 @@ import fileExplorerManager
 #     du_progress_signal = pyqtSignal(int)
 #     def __init__(self, parent=None):
 
-class DUDialogController(QObject):
+class DUDialogController(QObject, GUIHelpers.MVCModel):
     du_progress_signal = pyqtSignal(int)
     def __init__(self, fileExplorerItems, view=None, model=None):
-        super().__init__()
+        QObject.__init__(self)
         self.fileExplorerItems = fileExplorerItems
         self.totalSize = 0
         for item in fileExplorerItems:
@@ -39,9 +39,7 @@ class DUDialogController(QObject):
         #     self.itemsString = fileExplorerItems[0].path
         #     self.totalSize = DUDialogController.calculate_size(fileExplorerItems[0])
         #     self.totalSizeStr = fileExplorerManager.bytesToStr(self.totalSize)
-        self.view = view
-        self.model = model
-        self.view = view
+        GUIHelpers.MVCModel.__init__(self, model, view)
         self.bytes_downloaded = 0
         self.du_progress_signal.connect(self.on_download_progress)
         self.localDownloadDirectory = os.getcwd() + "\\Downloads"
@@ -69,8 +67,8 @@ class DUDialogController(QObject):
         Args:
             view: the view of the controller.
         """
-        # set the view
-        self.view = view
+        # set the view (included in MVCModel)
+        GUIHelpers.MVCModel.set_view(self, view)
 
         self.view.remoteDirectoryText.setText(self.itemsString)
         self.view.downloadLocationText.setText(self.localDownloadDirectory)
@@ -79,6 +77,7 @@ class DUDialogController(QObject):
 
 
     def on_download_progress(self, bytes_read):
+        print(f"Thread of progress: {threading.current_thread().name}")
         if bytes_read == -2:
             GUIHelpers.infobox("Download Cancelled",
                                "Download request was cancelled by the user. All partially downloaded files were deleted.")
@@ -90,14 +89,6 @@ class DUDialogController(QObject):
         else:
             self.bytes_downloaded += bytes_read
             self.view.update_progress_bar(min(round(self.bytes_downloaded/self.totalSize, 2)*100, 100))
-
-    def set_model(self, model):
-        """
-        Set the model of the controller.
-        Args:
-            model: the model of the controller.
-        """
-        self.model = model
 
     def closeButtonClicked(self):
         self.model.cancel_download()

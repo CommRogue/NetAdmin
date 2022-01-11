@@ -3,6 +3,7 @@ import queue
 from PyQt5.QtWidgets import QMessageBox
 
 import DUDialogController
+import OpenConnectionHelpers
 from NetProtocol import *
 import socket
 import NetHelpers
@@ -39,8 +40,9 @@ class DUDialogModel(QObject):
             download_progress_signal:
         """
         # request a new socket from client
+        print(f"Thread of download_files name: {threading.current_thread().name}")
         cancelled = False
-        socket = NetHelpers.open_connection(self.client)
+        socket = OpenConnectionHelpers.open_connection(self.client)
         excludedCount = 0
         for remotedir in remotedirs:
             # send request to client to download file

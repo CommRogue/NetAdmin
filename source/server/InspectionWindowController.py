@@ -6,6 +6,7 @@ from PyQt5.QtCore import pyqtSignal, QThread, QObject, QRunnable, QThreadPool
 import typing
 from PyQt5.QtWidgets import QTableWidgetItem, QTreeWidgetItem, QTreeWidgetItemIterator
 from fileExplorerManager import FileExplorerManager
+from RemoteShell.RemoteShell import RemoteShellManager
 
 
 class TabThreadEventManager(): #container class for the events that tab threads wait for
@@ -48,8 +49,9 @@ class ClientInspectorController(QObject):
         self.view = view
         self.client = client
         self.shown = threading.Event()
-        self.view.tabWidget.currentChanged.connect(self.tabChanged)
+        self.view.TabContainer.currentChanged.connect(self.tabChanged)
         self.fileExplorerManager = FileExplorerManager(client, self.view)
+        self.remoteShellManager = RemoteShellManager(client, self.view)
         client.dataLock.acquire_read()
 
         # #start the file explorer thread
@@ -88,6 +90,8 @@ class ClientInspectorController(QObject):
         if index == 1: #file explorer tab
             if not self.fileExplorerManager.is_initialized():
                 self.fileExplorerManager.initializeContents()
+        if index == 2: #remote shell tab
+            self.remoteShellManager.tab_entered()
 
     def updateSystemInformation(self):
         self.client.dataLock.acquire_read()

@@ -16,7 +16,7 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_10">
     <item>
-     <widget class="QTabWidget" name="tabWidget">
+     <widget class="QTabWidget" name="TabContainer">
       <property name="currentIndex">
        <number>2</number>
       </property>
@@ -451,31 +451,30 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab">
+      <widget class="QWidget" name="CommandLineTab">
        <attribute name="title">
         <string>Command Line</string>
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_3">
         <item>
-         <widget class="QTextEdit" name="shellTextViewer">
-          <property name="readOnly">
+         <widget class="QTabWidget" name="ShellTabContainer">
+          <property name="currentIndex">
+           <number>-1</number>
+          </property>
+          <property name="tabsClosable">
            <bool>true</bool>
           </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLineEdit" name="shellInput">
-          <property name="inputMask">
-           <string/>
+          <property name="movable">
+           <bool>true</bool>
           </property>
-          <property name="placeholderText">
-           <string>Enter a command...</string>
+          <property name="tabBarAutoHide">
+           <bool>false</bool>
           </property>
          </widget>
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_2">
+      <widget class="QWidget" name="ProcessManagerTab">
        <attribute name="title">
         <string>Process Manager</string>
        </attribute>
@@ -528,7 +527,7 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_3">
+      <widget class="QWidget" name="RemoteDesktopTab">
        <attribute name="title">
         <string>Remote Dekstop</string>
        </attribute>

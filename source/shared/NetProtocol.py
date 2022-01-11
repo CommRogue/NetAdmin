@@ -23,6 +23,7 @@ class NetTypes(Enum):
     NetDownloadFileDescriptor = 11
     NetOpenConnection = 12
     NetCloseConnection = 13
+    NetOpenShell = 14
 
 class NetStatusTypes(Enum):
     NetOK = 0
@@ -38,6 +39,11 @@ class NetDataStructure:
 @dataclasses.dataclass
 class NetStatus:
     statusCode: int
+
+@dataclasses.dataclass
+class NetShellCommand:
+    command: str
+
 
 @dataclasses.dataclass
 class NetOpenConnection(NetDataStructure):
