@@ -47,6 +47,8 @@ def receive(sock, proc):
         print(f"Got data: {data.decode()}")
         proc.stdin.write(data)
         p.stdin.flush()
+        proc.stdin.write("\n".encode())
+        p.stdin.flush()
 import socket
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
