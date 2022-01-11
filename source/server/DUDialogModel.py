@@ -53,7 +53,12 @@ class DUDialogModel(QObject):
             if not received_all:
                  cancelled = True
                  break
-
+        # if download was cancelled, report to user
+        if cancelled:
+            download_progress_signal.emit(-2)
+        # if all items were received fully, then report to user
+        else:
+            download_progress_signal.emit(-1)
         # check how many files were excluded
         if excludedCount != 0:
             dialog = QMessageBox()
@@ -61,5 +66,6 @@ class DUDialogModel(QObject):
             dialog.setWindowTitle("Excluded files in download request")
             dialog.setStandardButtons(QMessageBox.Ok)
             dialog.exec_()
+        # close socket
         socket.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetRequest, NetTypes.NetCloseConnection)))
         socket.close()

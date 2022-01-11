@@ -44,7 +44,7 @@ class ClientInspectorController(QObject):
 
     def __init__(self, view, client):
         super().__init__()
-        self.tabEventManager = TabThreadEventManager(0, *[threading.Event() for i in range(2)])
+        self.tabEventManager = TabThreadEventManager(0, *[threading.Event() for i in range(6)])
         self.view = view
         self.client = client
         self.shown = threading.Event()

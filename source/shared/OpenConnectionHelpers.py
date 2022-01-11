@@ -55,7 +55,7 @@ def sendallfiles(socket, dir) -> None:
 def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_progress_signal=None) -> tuple[
     bool, int, list[str]]:
     """
-    Receives files from the specified socket while reporting progress to the download_progress_signal.
+    Receives files from the specified socket from a single remote directory or file while reporting progress to the download_progress_signal.
     It places the files in the specified base_dir, and combines the relative directory of each
     received file with the base directory, so that the original directory structure is preserved.
     Note: This function takes care of creating the necessary directories according to the downloaded remote directory.
@@ -127,14 +127,11 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
         response = orjson.loads(message)  # convert the message to dictionary from json
 
     # if loop exited due to status code cancel, then log
-    status = status_queue.get_nowait()
-    if status == "cancel":
-        logging.info("Receive cancelled.")
-        if download_progress_signal:
-            download_progress_signal.emit(-2)
-        return False, excludedCount, pathlist
+    if not status_queue.empty():
+        status = status_queue.get_nowait()
+        if status == "cancel":
+            logging.info("Receive of 1 item cancelled.")
+            return False, excludedCount, pathlist
     else:
-        logging.info("Receive succeeded.")
-        if download_progress_signal:
-            download_progress_signal.emit(-1)
+        logging.info("Receive of 1 item succeeded.")
         return True, excludedCount, pathlist

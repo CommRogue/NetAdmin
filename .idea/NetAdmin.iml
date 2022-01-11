@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/source/client" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/source/server" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/source/shared" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.10 (NetAdmin)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
