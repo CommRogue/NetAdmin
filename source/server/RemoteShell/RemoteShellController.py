@@ -32,6 +32,9 @@ class RemoteShellController(QObject, GUIHelpers.MVCModel):
         GUIHelpers.MVCModel.set_model(self, model)
         self.sendTextSignal.connect(self.model.send_text)
 
+    def stop(self):
+        self.continue_reading.set(False)
+
     def start(self):
         if self.view and self.model:
             thread = threading.Thread(target=self.model._start, args=(self.client, self.continue_reading, self.updateTextSignal,))

@@ -63,6 +63,8 @@ class ClientInspectorView(QMainWindow):
         self.TabContainer.setCurrentIndex(0)
         self.fileViewer.header().setVisible(True)
         self.fileViewer.header().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.shellAddButton = QPushButton("+")
+        self.ShellTabContainer.setCornerWidget(self.shellAddButton, QtCore.Qt.TopLeftCorner)
 
     def setupUi(self, ClientInspectionWindow):
         ClientInspectionWindow.setObjectName("ClientInspectionWindow")

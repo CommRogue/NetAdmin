@@ -31,3 +31,5 @@ class RemoteShellModel(QObject):
             except Exception as e:
                 print(f"ERROR {str(e)}")
                 break
+        if not status:
+            self.sock.close()
