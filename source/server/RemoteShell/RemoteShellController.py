@@ -17,7 +17,7 @@ class RemoteShellController(QObject, GUIHelpers.MVCModel):
 
     def get_command(self):
         if self.view and self.model:
-            text_input = self.view.shellInput.returnPressed.text()
+            text_input = self.view.shellInput.text()
             if text_input != "":
                 self.view.shellInput.clear()
                 text_input += '\n'

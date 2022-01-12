@@ -4,18 +4,17 @@ class RemoteShellView(QtWidgets.QWidget):
     def __init__(self, controller, parent=None):
         super().__init__(parent)
         self.controller = controller
-        self.CommandLineTab = QtWidgets.QWidget()
-        self.CommandLineTab.setObjectName("CommandLineTab")
-        self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.CommandLineTab)
-        self.verticalLayout_3.setObjectName("verticalLayout_3")
-        self.shellTextViewer = QtWidgets.QTextEdit(self.CommandLineTab)
+        self.setObjectName("ShellWindow")
+        self.verticalLayout_12 = QtWidgets.QVBoxLayout(self)
+        self.verticalLayout_12.setObjectName("verticalLayout_12")
+        self.shellTextViewer = QtWidgets.QTextEdit(self)
         self.shellTextViewer.setReadOnly(True)
         self.shellTextViewer.setObjectName("shellTextViewer")
-        self.verticalLayout_3.addWidget(self.shellTextViewer)
-        self.shellInput = QtWidgets.QLineEdit(self.CommandLineTab)
+        self.verticalLayout_12.addWidget(self.shellTextViewer)
+        self.shellInput = QtWidgets.QLineEdit(self)
         self.shellInput.setInputMask("")
         self.shellInput.setObjectName("shellInput")
-        self.verticalLayout_3.addWidget(self.shellInput)
+        self.verticalLayout_12.addWidget(self.shellInput)
         self.shellInput.setPlaceholderText("Enter a command...")
 
     def add_text(self, text):

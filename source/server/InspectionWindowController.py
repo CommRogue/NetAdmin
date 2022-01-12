@@ -51,7 +51,7 @@ class ClientInspectorController(QObject):
         self.shown = threading.Event()
         self.view.TabContainer.currentChanged.connect(self.tabChanged)
         self.fileExplorerManager = FileExplorerManager(client, self.view)
-        self.remoteShellManager = RemoteShellManager(client, self.view)
+        self.remoteShellManager = RemoteShellManager(client, self)
         client.dataLock.acquire_read()
 
         # #start the file explorer thread

@@ -3,6 +3,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QCloseEvent, QBrush, QColor
 from PyQt5.QtCore import pyqtSignal
+from QDetachableWidget import DetachableTabWidget
 
 class FileExplorerItem(QTreeWidgetItem):
     def __init__(self, path, collapsable, strings, size=None, parent=None, styling=None):
@@ -59,16 +60,13 @@ class ClientInspectorView(QMainWindow):
         self.SystemInformationTable.setItem(4, 0, QTableWidgetItem("GPU_NAME"))
 
     def custom(self):
-        pass
-        # h = self.SystemInformationTable.horizontalHeader()
-        # h.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        # h.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
-        # self.SystemInformationTable.setSelectionMode(QAbstractItemView.SingleSelection)
-        # self.SystemInformationTable.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.TabContainer.setCurrentIndex(0)
+        self.fileViewer.header().setVisible(True)
+        self.fileViewer.header().setSectionResizeMode(QHeaderView.ResizeToContents)
 
     def setupUi(self, ClientInspectionWindow):
         ClientInspectionWindow.setObjectName("ClientInspectionWindow")
-        ClientInspectionWindow.resize(795, 600)
+        ClientInspectionWindow.resize(795, 596)
         self.centralwidget = QtWidgets.QWidget(ClientInspectionWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout_10 = QtWidgets.QVBoxLayout(self.centralwidget)
@@ -276,18 +274,18 @@ class ClientInspectorView(QMainWindow):
         self.verticalLayout_2.addWidget(self.groupBox)
         self.fileViewer = QtWidgets.QTreeWidget(self.FileExplorerTab)
         self.fileViewer.setSelectionMode(QtWidgets.QAbstractItemView.ContiguousSelection)
+        self.fileViewer.setColumnCount(4)
         self.fileViewer.setObjectName("fileViewer")
-        self.fileViewer.header().setVisible(False)
         self.fileViewer.header().setMinimumSectionSize(50)
         self.fileViewer.header().setSortIndicatorShown(False)
-        self.fileViewer.header().setStretchLastSection(True)
+        self.fileViewer.header().setStretchLastSection(False)
         self.verticalLayout_2.addWidget(self.fileViewer)
         self.TabContainer.addTab(self.FileExplorerTab, "")
         self.CommandLineTab = QtWidgets.QWidget()
         self.CommandLineTab.setObjectName("CommandLineTab")
         self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.CommandLineTab)
         self.verticalLayout_3.setObjectName("verticalLayout_3")
-        self.ShellTabContainer = QtWidgets.QTabWidget(self.CommandLineTab)
+        self.ShellTabContainer = DetachableTabWidget(self.CommandLineTab)
         self.ShellTabContainer.setTabsClosable(True)
         self.ShellTabContainer.setMovable(True)
         self.ShellTabContainer.setTabBarAutoHide(False)
@@ -374,7 +372,6 @@ class ClientInspectorView(QMainWindow):
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi(ClientInspectionWindow)
-        self.TabContainer.setCurrentIndex(2)
         self.ShellTabContainer.setCurrentIndex(-1)
         QtCore.QMetaObject.connectSlotsByName(ClientInspectionWindow)
 

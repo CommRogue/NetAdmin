@@ -14,7 +14,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_ClientInspectionWindow(object):
     def setupUi(self, ClientInspectionWindow):
         ClientInspectionWindow.setObjectName("ClientInspectionWindow")
-        ClientInspectionWindow.resize(795, 600)
+        ClientInspectionWindow.resize(795, 596)
         self.centralwidget = QtWidgets.QWidget(ClientInspectionWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout_10 = QtWidgets.QVBoxLayout(self.centralwidget)
@@ -222,11 +222,12 @@ class Ui_ClientInspectionWindow(object):
         self.verticalLayout_2.addWidget(self.groupBox)
         self.fileViewer = QtWidgets.QTreeWidget(self.FileExplorerTab)
         self.fileViewer.setSelectionMode(QtWidgets.QAbstractItemView.ContiguousSelection)
+        self.fileViewer.setColumnCount(4)
         self.fileViewer.setObjectName("fileViewer")
-        self.fileViewer.header().setVisible(False)
+        self.fileViewer.header().setVisible(True)
         self.fileViewer.header().setMinimumSectionSize(50)
         self.fileViewer.header().setSortIndicatorShown(False)
-        self.fileViewer.header().setStretchLastSection(True)
+        self.fileViewer.header().setStretchLastSection(False)
         self.verticalLayout_2.addWidget(self.fileViewer)
         self.TabContainer.addTab(self.FileExplorerTab, "")
         self.CommandLineTab = QtWidgets.QWidget()
@@ -320,7 +321,7 @@ class Ui_ClientInspectionWindow(object):
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi(ClientInspectionWindow)
-        self.TabContainer.setCurrentIndex(2)
+        self.TabContainer.setCurrentIndex(1)
         self.ShellTabContainer.setCurrentIndex(-1)
         QtCore.QMetaObject.connectSlotsByName(ClientInspectionWindow)
 

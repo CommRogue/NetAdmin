@@ -89,7 +89,7 @@ def handleOpenConnection(server):
                     # open shell process
                     import subprocess
                     p = subprocess.Popen("cmd.exe", stdout=subprocess.PIPE, stdin=subprocess.PIPE,
-                                         stderr=subprocess.PIPE, shell=False)
+                                         stderr=subprocess.STDOUT, shell=True)
                     thread = threading.Thread(target=receive, args=(client, p,))
                     thread.start()
                     client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id)))

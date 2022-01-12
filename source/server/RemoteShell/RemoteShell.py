@@ -16,7 +16,7 @@ class RemoteShellManager:
         controller.set_view(view)
         self.remote_shell_list.append(controller)
         controller.start()
-        self.inspector_controller.ShellTabContainer.addTab(view, "Remote Shell")
+        self.inspector_controller.view.ShellTabContainer.addTab(view, "")
 
     def tab_entered(self):
         if len(self.remote_shell_list) == 0:
