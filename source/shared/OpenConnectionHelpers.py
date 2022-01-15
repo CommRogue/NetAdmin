@@ -60,20 +60,37 @@ def sendfile(directory, socket):
         file.close()
 
 def sendallfiles(socket, dir) -> None:
-    if socket.fileno() == -1:
-        raise ConnectionResetError("Socket is closed")
-    if os.path.islink(dir):
-        return
-    if os.path.isfile(dir):
-        sendfile(dir, socket)
-    else:
-        try:
-            for item in os.scandir(dir):
-                sendallfiles(socket, os.path.join(dir, item.name))
-        except:
-            socket.send(NetProtocol.packNetMessage(
-                NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value),
-                           extra=dir)))
+    try:
+        if socket.fileno() == -1:
+            raise ConnectionResetError("Socket is closed")
+        if os.path.islink(dir):
+            return
+        if os.path.isfile(dir):
+            sendfile(dir, socket)
+        else:
+            try:
+                scan = os.scandir(dir)
+                # check if there are any items in the iterator
+                if any(True for _ in scan):
+                    for item in os.scandir(dir):
+                        sendallfiles(socket, os.path.join(dir, item.name))
+                else:
+                    socket.send(NetProtocol.packNetMessage(
+                        NetMessage(type=NetTypes.NetDownloadDirectoryDescriptor.value,
+                                   data=NetDownloadDirectoryDescriptor(dir))))
+            except PermissionError:
+                socket.send(NetProtocol.packNetMessage(
+                    NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value),
+                               extra=dir)))
+    except ConnectionResetError:
+        print("Connection reset")
+
+def resolveRemoteDirectoryToLocal(base_remote_directory, actual_remote_directory, local_directory) -> str:
+    # get the relative path from the directory that the user chose to the directory that the file is in
+    relative_path = os.path.relpath(actual_remote_directory, os.path.join(base_remote_directory, ".."))
+
+    # combine the relative path with the local directory that the user chose
+    return  os.path.join(local_directory, relative_path)
 
 def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_progress_signal=None) -> tuple[
     bool, int, list[str]]:
@@ -103,15 +120,14 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
         if response['type'] == NetTypes.NetStatus.value:
             if response['data'].get("statusCode") == NetStatusTypes.NetDirectoryAccessDenied.value:
                 excludedCount += 1
-        if response['type'] == NetTypes.NetDownloadFileDescriptor.value:
+        elif response['type'] == NetTypes.NetDownloadFileDescriptor.value:
             # get size and name
             file_size = response['data']['size']
             file_directory = response['data']['directory']
-            # get the relative path from the directory that the user chose to the directory that the file is in
-            relative_path = os.path.relpath(file_directory, os.path.join(base_remote_dir, ".."))
 
-            # combine the relative path with the local directory that the user chose
-            path = os.path.join(local_dir, relative_path)
+            # resolve to local directory
+            path = resolveRemoteDirectoryToLocal(base_remote_dir, file_directory, local_dir)
+
             # append the path to the list of paths downloaded to
             pathlist.append(path)
             # verify if the directory that the file exists in exists
@@ -119,6 +135,8 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
                 logging.info(f"Directory {path} didn't exist. Created it.")
 
             bytes_received = 0
+            bytes_to_signal = file_size/100
+            tbs = bytes_to_signal
             # open file by combining the local download directory (+directory offset) and the file name
             with open(path, 'wb+') as f:
                 # read file data in chunks of 1024 bytes
@@ -130,13 +148,15 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
                         break
                     f.write(data)
                     bytes_received += len(data)
-
-                    # report progress (1024 bytes read)
-                    if download_progress_signal:
-                        download_progress_signal.emit(len(data))
+                    tbs -= len(data)
+                    # report progress
+                    if download_progress_signal and tbs < 0:
+                        download_progress_signal.emit(bytes_to_signal-tbs)
+                        tbs = bytes_to_signal
 
                     #if we received all the bytes, then finished file download
                     if bytes_received == file_size:
+                        download_progress_signal.emit(bytes_to_signal-tbs)
                         break
                 if not status_queue.empty():
                     # if the status queue is not empty, then the user has requested to cancel the download
@@ -144,7 +164,10 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
                     f.close()
                     os.remove(path)
                     break
-
+        elif response['type'] == NetTypes.NetDownloadDirectoryDescriptor.value:
+            file_directory = response['data']['directory']
+            path = resolveRemoteDirectoryToLocal(base_remote_dir, file_directory, local_dir)
+            verify_dir(path)
         # receive next message
         size, message = NetProtocol.unpackFromSocket(socket)
         response = orjson.loads(message)  # convert the message to dictionary from json

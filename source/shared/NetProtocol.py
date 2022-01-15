@@ -21,9 +21,10 @@ class NetTypes(Enum):
     NetDownloadFile = 9
     NetStatus = 10
     NetDownloadFileDescriptor = 11
-    NetOpenConnection = 12
-    NetCloseConnection = 13
-    NetOpenShell = 14
+    NetDownloadDirectoryDescriptor = 12
+    NetOpenConnection = 13
+    NetCloseConnection = 14
+    NetOpenShell = 15
 
 class NetStatusTypes(Enum):
     NetOK = 0
@@ -113,14 +114,21 @@ class NetDownloadFileDescriptor(NetDataStructure):
     # buffer_size : int
     # buffer_block_count : int
 
+@dataclasses.dataclass
+class NetDownloadDirectoryDescriptor(NetDataStructure):
+    directory: str
+
 class NetDownloadBlock(NetDataStructure):
     data : bytes
 
 @dataclasses.dataclass
 class NetGeoInfo:
-    COUNTRY: str
-    CITY: str
     REAL_IP: str
+    COUNTRY: str
+    COUNTRY_CODE: str
+    CITY: str
+    ISP: str
+    TIMEZONE: str
 
 
 @dataclasses.dataclass

@@ -419,20 +419,19 @@ class ClientConnectionHandler(QRunnable):
 
         #if the client identified, resolve the client's IP address
         if self.client.address[0] != "127.0.0.1": # if not our own computer, then resolve the IP address
-            response = urlopen(f"http://ipinfo.io/{self.client.address[0]}/json")
+            response = urlopen(f"http://ipwhois.app/json/{self.client.address[0]}")
         else: # otherwise resolve our own IP address
-            response = urlopen("http://ipinfo.io/json")
+            response = urlopen("http://ipwhois.app/json/")
         data = json.load(response)
         IP = data['ip']
-        try:
-            city = data['city']
-            country = data['country']
-        except:
-            city = "Unknown"
-            country = "Unknown"
+        country = data.get('country', "N/A")
+        city = data.get('city', "N/A")
+        country_code = data.get('country_code', "N/A")
+        isp = data.get('isp', "N/A")
+        timezone = data.get('timezone_name', "N/A")
 
         self.client.dataLock.acquire_write()
-        self.client.geoInformation = NetGeoInfo(country, city, IP)
+        self.client.geoInformation = NetGeoInfo(IP, country, country_code, city, isp, timezone)
         self.client.dataLock.release_write()
         self.client.sConnection_start.emit() #emit signal to update UI
 

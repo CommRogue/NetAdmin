@@ -18,7 +18,7 @@
     <item>
      <widget class="QTabWidget" name="TabContainer">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="ConnectionInformationTab">
        <attribute name="title">
@@ -312,44 +312,12 @@
                </font>
               </property>
               <property name="text">
-               <string>Connection Information</string>
+               <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;Connection Information&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
               </property>
              </widget>
             </item>
             <item>
-             <layout class="QHBoxLayout" name="horizontalLayout_11">
-              <item>
-               <layout class="QGridLayout" name="gridLayout">
-                <property name="sizeConstraint">
-                 <enum>QLayout::SetDefaultConstraint</enum>
-                </property>
-                <item row="1" column="0">
-                 <widget class="QLabel" name="label_8">
-                  <property name="font">
-                   <font>
-                    <pointsize>14</pointsize>
-                   </font>
-                  </property>
-                  <property name="text">
-                   <string>Latency</string>
-                  </property>
-                 </widget>
-                </item>
-                <item row="0" column="0">
-                 <widget class="QLabel" name="label_10">
-                  <property name="font">
-                   <font>
-                    <pointsize>14</pointsize>
-                   </font>
-                  </property>
-                  <property name="text">
-                   <string>Address</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-             </layout>
+             <widget class="ClientInformationTable" name="connectionInformationTable"/>
             </item>
            </layout>
           </widget>
@@ -377,28 +345,28 @@
            <item>
             <widget class="QPushButton" name="expandButton">
              <property name="text">
-              <string>Expand</string>
+              <string>Expand Selection/s</string>
              </property>
             </widget>
            </item>
            <item>
             <widget class="QPushButton" name="deleteButton">
              <property name="text">
-              <string>Delete</string>
+              <string>Delete Selection/s</string>
              </property>
             </widget>
            </item>
            <item>
             <widget class="QPushButton" name="downloadButton">
              <property name="text">
-              <string>Download</string>
+              <string>Download Selection/s</string>
              </property>
             </widget>
            </item>
            <item>
             <widget class="QPushButton" name="pushButton">
              <property name="text">
-              <string>PushButton</string>
+              <string>Upload to...</string>
              </property>
             </widget>
            </item>
@@ -619,6 +587,13 @@
    </property>
   </action>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ClientInformationTable</class>
+   <extends>QTableWidget</extends>
+   <header>CustomWidgets.h</header>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="../../../OneDrive/לימודים/אביב יב/NetAdmin/PyUIC/resources/resources.qrc"/>
  </resources>

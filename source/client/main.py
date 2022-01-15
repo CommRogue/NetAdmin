@@ -55,7 +55,7 @@ def try_connection(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except ConnectionAbortedError:
+        except (ConnectionAbortedError, ConnectionResetError):
             print("Connection disconnected by server without message")
     return wrapper
 

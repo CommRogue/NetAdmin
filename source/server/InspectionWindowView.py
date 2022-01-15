@@ -3,6 +3,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QCloseEvent, QBrush, QColor
 from PyQt5.QtCore import pyqtSignal
+
+from CustomWidgets import ClientInformationTable
 from QDetachableWidget import DetachableTabWidget
 
 class FileExplorerItem(QTreeWidgetItem):
@@ -227,25 +229,11 @@ class ClientInspectorView(QMainWindow):
         self.ConnectionInformationHeader.setFont(font)
         self.ConnectionInformationHeader.setObjectName("ConnectionInformationHeader")
         self.verticalLayout_11.addWidget(self.ConnectionInformationHeader)
-        self.horizontalLayout_11 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_11.setObjectName("horizontalLayout_11")
-        self.gridLayout = QtWidgets.QGridLayout()
-        self.gridLayout.setSizeConstraint(QtWidgets.QLayout.SetDefaultConstraint)
-        self.gridLayout.setObjectName("gridLayout")
-        self.label_8 = QtWidgets.QLabel(self.verticalLayoutWidget)
-        font = QtGui.QFont()
-        font.setPointSize(14)
-        self.label_8.setFont(font)
-        self.label_8.setObjectName("label_8")
-        self.gridLayout.addWidget(self.label_8, 1, 0, 1, 1)
-        self.label_10 = QtWidgets.QLabel(self.verticalLayoutWidget)
-        font = QtGui.QFont()
-        font.setPointSize(14)
-        self.label_10.setFont(font)
-        self.label_10.setObjectName("label_10")
-        self.gridLayout.addWidget(self.label_10, 0, 0, 1, 1)
-        self.horizontalLayout_11.addLayout(self.gridLayout)
-        self.verticalLayout_11.addLayout(self.horizontalLayout_11)
+        self.connectionInformationTable = ClientInformationTable(self.verticalLayoutWidget)
+        self.connectionInformationTable.setObjectName("connectionInformationTable")
+        self.connectionInformationTable.setColumnCount(0)
+        self.connectionInformationTable.setRowCount(0)
+        self.verticalLayout_11.addWidget(self.connectionInformationTable)
         self.verticalLayout_9.addWidget(self.splitter)
         self.TabContainer.addTab(self.ConnectionInformationTab, "")
         self.FileExplorerTab = QtWidgets.QWidget()
@@ -278,6 +266,7 @@ class ClientInspectorView(QMainWindow):
         self.fileViewer.setSelectionMode(QtWidgets.QAbstractItemView.ContiguousSelection)
         self.fileViewer.setColumnCount(4)
         self.fileViewer.setObjectName("fileViewer")
+        self.fileViewer.header().setVisible(False)
         self.fileViewer.header().setMinimumSectionSize(50)
         self.fileViewer.header().setSortIndicatorShown(False)
         self.fileViewer.header().setStretchLastSection(False)
@@ -287,7 +276,7 @@ class ClientInspectorView(QMainWindow):
         self.CommandLineTab.setObjectName("CommandLineTab")
         self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.CommandLineTab)
         self.verticalLayout_3.setObjectName("verticalLayout_3")
-        self.ShellTabContainer = DetachableTabWidget(self.CommandLineTab)
+        self.ShellTabContainer = QtWidgets.QTabWidget(self.CommandLineTab)
         self.ShellTabContainer.setTabsClosable(True)
         self.ShellTabContainer.setMovable(True)
         self.ShellTabContainer.setTabBarAutoHide(False)
@@ -374,6 +363,7 @@ class ClientInspectorView(QMainWindow):
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi(ClientInspectionWindow)
+        self.TabContainer.setCurrentIndex(0)
         self.ShellTabContainer.setCurrentIndex(-1)
         QtCore.QMetaObject.connectSlotsByName(ClientInspectionWindow)
 
@@ -392,16 +382,15 @@ class ClientInspectorView(QMainWindow):
         self.RamUsagePrecentage.setText(_translate("ClientInspectionWindow", "TextLabel"))
         self.DiskUsageLabel.setText(_translate("ClientInspectionWindow", "Disk Usage"))
         self.DiskUsagePrecentage.setText(_translate("ClientInspectionWindow", "TextLabel"))
-        self.ConnectionInformationHeader.setText(_translate("ClientInspectionWindow", "Connection Information"))
-        self.label_8.setText(_translate("ClientInspectionWindow", "Latency"))
-        self.label_10.setText(_translate("ClientInspectionWindow", "Address"))
+        self.ConnectionInformationHeader.setText(_translate("ClientInspectionWindow",
+                                                            "<html><head/><body><p align=\"center\">Connection Information</p></body></html>"))
         self.TabContainer.setTabText(self.TabContainer.indexOf(self.ConnectionInformationTab),
                                      _translate("ClientInspectionWindow", "General Information"))
         self.groupBox.setTitle(_translate("ClientInspectionWindow", "Actions"))
-        self.expandButton.setText(_translate("ClientInspectionWindow", "Expand"))
-        self.deleteButton.setText(_translate("ClientInspectionWindow", "Delete"))
-        self.downloadButton.setText(_translate("ClientInspectionWindow", "Download"))
-        self.pushButton.setText(_translate("ClientInspectionWindow", "PushButton"))
+        self.expandButton.setText(_translate("ClientInspectionWindow", "Expand Selection/s"))
+        self.deleteButton.setText(_translate("ClientInspectionWindow", "Delete Selection/s"))
+        self.downloadButton.setText(_translate("ClientInspectionWindow", "Download Selection/s"))
+        self.pushButton.setText(_translate("ClientInspectionWindow", "Upload to..."))
         self.fileViewer.headerItem().setText(0, _translate("ClientInspectionWindow", "Name"))
         self.fileViewer.headerItem().setText(1, _translate("ClientInspectionWindow", "Created"))
         self.fileViewer.headerItem().setText(2, _translate("ClientInspectionWindow", "Last Modified"))
