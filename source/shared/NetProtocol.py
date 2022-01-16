@@ -25,6 +25,7 @@ class NetTypes(Enum):
     NetOpenConnection = 13
     NetCloseConnection = 14
     NetOpenShell = 15
+    NetDirectorySize = 16
 
 class NetStatusTypes(Enum):
     NetOK = 0
@@ -118,8 +119,9 @@ class NetDownloadFileDescriptor(NetDataStructure):
 class NetDownloadDirectoryDescriptor(NetDataStructure):
     directory: str
 
-class NetDownloadBlock(NetDataStructure):
-    data : bytes
+@dataclasses.dataclass
+class NetDirectorySize(NetDataStructure):
+    size : int
 
 @dataclasses.dataclass
 class NetGeoInfo:

@@ -179,7 +179,7 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
             logging.info("Receive of 1 item cancelled.")
             return False, excludedCount, pathlist
     else:
-        logging.info("Receive of 1 item succeeded.")
+        logging.info("Receive of 1 item succeeded/excluded.")
         return True, excludedCount, pathlist
 
 

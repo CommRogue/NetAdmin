@@ -8,7 +8,7 @@ from CustomWidgets import ClientInformationTable
 from QDetachableWidget import DetachableTabWidget
 
 class FileExplorerItem(QTreeWidgetItem):
-    def __init__(self, path, collapsable, strings, size=None, parent=None, styling=None):
+    def __init__(self, path, collapsable, strings, size=None, parent=None, styling=None, nosize=False):
         self.size = size
 
         # if passed less then 4 strings, fill with empty strings
@@ -36,6 +36,9 @@ class FileExplorerItem(QTreeWidgetItem):
         self.path = path
         if styling:
             self.setForeground(0, QBrush(QColor(styling.color)))
+        if nosize:
+            self.setForeground(3, QBrush(QColor("crimson")))
+
 
 class ClientInspectorView(QMainWindow):
     exitEvent = pyqtSignal(QCloseEvent)
@@ -64,6 +67,7 @@ class ClientInspectorView(QMainWindow):
     def custom(self):
         self.TabContainer.setCurrentIndex(0)
         self.fileViewer.header().setVisible(True)
+        self.SystemInformationTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.fileViewer.header().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.shellAddButton = QPushButton("+")
         self.ShellTabContainer.setCornerWidget(self.shellAddButton, QtCore.Qt.TopLeftCorner)
@@ -98,7 +102,7 @@ class ClientInspectorView(QMainWindow):
         item = QtWidgets.QTableWidgetItem()
         self.SystemInformationTable.setHorizontalHeaderItem(1, item)
         self.SystemInformationTable.horizontalHeader().setSortIndicatorShown(False)
-        self.SystemInformationTable.horizontalHeader().setStretchLastSection(False)
+        self.SystemInformationTable.horizontalHeader().setStretchLastSection(True)
         self.horizontalLayout_2.addWidget(self.SystemInformationTable)
         self.verticalLayout_8 = QtWidgets.QVBoxLayout()
         self.verticalLayout_8.setObjectName("verticalLayout_8")
@@ -269,7 +273,7 @@ class ClientInspectorView(QMainWindow):
         self.fileViewer.header().setVisible(False)
         self.fileViewer.header().setMinimumSectionSize(50)
         self.fileViewer.header().setSortIndicatorShown(False)
-        self.fileViewer.header().setStretchLastSection(False)
+        self.fileViewer.header().setStretchLastSection(True)
         self.verticalLayout_2.addWidget(self.fileViewer)
         self.TabContainer.addTab(self.FileExplorerTab, "")
         self.CommandLineTab = QtWidgets.QWidget()
@@ -363,7 +367,7 @@ class ClientInspectorView(QMainWindow):
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi(ClientInspectionWindow)
-        self.TabContainer.setCurrentIndex(0)
+        self.TabContainer.setCurrentIndex(2)
         self.ShellTabContainer.setCurrentIndex(-1)
         QtCore.QMetaObject.connectSlotsByName(ClientInspectionWindow)
 

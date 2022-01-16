@@ -9,7 +9,7 @@ import logging
 import math
 import DUDialog
 
-def bytesToStr(size : int):
+def bytesToStr(size : int) -> str:
     """
     Convert file size in bytes to human readable string
     Args:
@@ -24,8 +24,8 @@ def bytesToStr(size : int):
         # get remainder
         p = math.pow(1024, i)
         s = round(size / p, 2)
-        return f"{s} {size_name[i]}"
-    return size
+        return str(f"{s} {size_name[i]}")
+    return str(size)
 
 class DirectoryDeletionAction(QRunnable):
     def __init__(self, client, selections, sUpdate, sClear, sRemove, infoboxSignal):
@@ -62,6 +62,7 @@ class DirectoryListingAction(QRunnable):
     def run(self):
         if self.itemParent: #if the click is directed towards a directory and not just the drives
             path = self.itemParent.path
+            self.sClear.emit(self.itemParent)
             self.sUpdate.emit(FileExplorerItem(None, False, ["Loading...."], size=None, parent=self.itemParent, styling=None), self.itemParent)
         else: #if directory is the drives (root)
             #self.view.fileViewer.insertTopLevelItem(0, QTreeWidgetItem(["Loading..."]))
@@ -87,14 +88,28 @@ class DirectoryListingAction(QRunnable):
                     date_modified = None
 
                 strings = [item["name"], date_created, date_modified]
-                if item["size"] != 0:
+                if item["size"] and item["size"] != 0 and item["size"] != -1:
                     strings.append(bytesToStr(item["size"]))
+                    nosize = False
+                elif item["size"] == -1:
+                    strings.append("N/A: Download to calculate")
+                    nosize = True
+                else:
+                    nosize = False
 
                 # emit a signal to add the item to the treeview.
                 # if no parent, then self.itemParent is None and the item will be added to the top level
                 # single-line if statement to handle the case where the item is a directory. if so, then set the collapsable argument to true
-                self.sUpdate.emit(FileExplorerItem(item["path"], True if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value else False, strings, item["size"], self.itemParent, None), self.itemParent)
+                self.sUpdate.emit(FileExplorerItem(item["path"], True if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value else False, strings, item["size"], self.itemParent, None, nosize=nosize), self.itemParent)
         self.view.update()
+
+def getActualDirectorySize(client, item, finishedSignal):
+    event = client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDirectorySize, extra=item.path), track_event=True)
+    event.wait()
+    data = event.get_data()
+    if type(data) is NetDirectorySize:
+        item.size = data.size
+        finishedSignal.emit()
 
 class FileExplorerManager(QObject):
     sDirectoryListingUpdate = pyqtSignal(FileExplorerItem, object)  # child, parent
@@ -177,7 +192,7 @@ class FileExplorerManager(QObject):
             DUController.set_view(DUView)
             DUController.set_model(DUModel)
 
-            DUView.exec_()
+            DUController.exec_()
 
     def fileViewerSelectionChanged(self):
         """

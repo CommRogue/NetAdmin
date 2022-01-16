@@ -1,7 +1,8 @@
 import os
 import threading
 
-from PyQt5.QtWidgets import QMessageBox, QFileDialog
+from PyQt5.QtWidgets import QMessageBox, QFileDialog, QDialog
+import PyQt5.QtCore
 
 import DUDialog
 from PyQt5.QtCore import pyqtSignal, QObject
@@ -15,19 +16,46 @@ import fileExplorerManager
 
 class DUDialogController(QObject, GUIHelpers.MVCModel):
     du_progress_signal = pyqtSignal(int)
+    infobox_signal = pyqtSignal(str, str)
+    exec_signal = pyqtSignal()
+    currentLoadingView = None
+
+    def exec_(self):
+        finished = True
+        totalsize = 0
+        if self.currentLoadingView is not None:
+            self.currentLoadingView.hide()
+        for item in self.fileExplorerItems:
+            if item.size != -1:
+                totalsize += item.size
+            else:
+                finished = False
+                self.currentLoadingView = QMessageBox()
+                self.currentLoadingView.setText(f"Calculating file size for item {item.path}...")
+                self.currentLoadingView.setWindowTitle("Loading...")
+                self.currentLoadingView.setStandardButtons(QMessageBox.NoButton)
+                self.currentLoadingView.setWindowModality(PyQt5.QtCore.Qt.NonModal)
+                self.currentLoadingView.setAttribute(PyQt5.QtCore.Qt.WA_DeleteOnClose, True)
+                self.currentLoadingView.show()
+                thread = threading.Thread(target=fileExplorerManager.getActualDirectorySize, args=(self.model.client, item, self.exec_signal,))
+                thread.start()
+                break
+        if finished:
+            self.totalSize = totalsize
+            self.totalSizeStr = fileExplorerManager.bytesToStr(self.totalSize)
+            self.view.fileSizeText.setText(self.totalSizeStr)
+            self.view.downloadTimeText.setText(f"{round(self.totalSize / 2500000, 2)}s")
+            self.view.exec_()
+
+
     def __init__(self, fileExplorerItems, view=None, model=None):
         QObject.__init__(self)
         self.fileExplorerItems = fileExplorerItems
         self.totalSize = 0
-        for item in fileExplorerItems:
-            if item.size:
-                self.totalSize += item.size
-        self.totalSizeStr = fileExplorerManager.bytesToStr(self.totalSize)
         if len(fileExplorerItems) > 1:
             self.itemsString = f"{len(fileExplorerItems)} items"
         else:
             self.itemsString = fileExplorerItems[0].path
-        self.totalSizeStr = str(self.totalSizeStr)
 
         # if len(fileExplorerItems) > 1:
         #     self.itemsString = f"{len(fileExplorerItems)} items"
@@ -42,6 +70,8 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
         GUIHelpers.MVCModel.__init__(self, model, view)
         self.bytes_downloaded = 0
         self.du_progress_signal.connect(self.on_download_progress)
+        self.infobox_signal.connect(GUIHelpers.infobox)
+        self.exec_signal.connect(self.exec_)
         self.localDownloadDirectory = os.getcwd() + "\\Downloads"
 
     @staticmethod
@@ -72,20 +102,22 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
 
         self.view.remoteDirectoryText.setText(self.itemsString)
         self.view.downloadLocationText.setText(self.localDownloadDirectory)
-        self.view.fileSizeText.setText(self.totalSizeStr)
-        self.view.downloadTimeText.setText(f"{round(self.totalSize / 2500000, 2)}s")
-
 
     def on_download_progress(self, bytes_read):
         print(f"Thread of progress: {threading.current_thread().name}")
+        # download cancelled by user
         if bytes_read == -2:
             GUIHelpers.infobox("Download Cancelled",
                                "Download request was cancelled by the user. All partially downloaded files were deleted.")
             # don't have to close since closeButtonClicked will close the window
+        # download finished
         elif bytes_read == -1:
             GUIHelpers.infobox("Download finished",
                                f'The download of "{self.itemsString}" has finished. \n It can be located at "{self.localDownloadDirectory}"')
             self.view.close()
+        # don't display download progress message
+        elif bytes_read == -3:
+            pass
         else:
             self.bytes_downloaded += bytes_read
             self.view.update_progress_bar(min(round(self.bytes_downloaded/self.totalSize, 2)*100, 100))
@@ -105,12 +137,13 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
         remotedirs = self.fileExplorerItems
         remotedirs = map(lambda x: x.path, remotedirs)
 
+
         #-- # iterate over the file explorer items and check if they are collpasable. if so, then add all their children to the list
         #-- for item in self.fileExplorerItems:
         #--     self.resolveChildren(remotedirs, item, item.path)
 
         # download file
-        download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal))
+        download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal, self.infobox_signal))
         download_thread.start()
 
     @staticmethod

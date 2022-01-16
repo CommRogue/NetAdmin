@@ -18,7 +18,7 @@
     <item>
      <widget class="QTabWidget" name="TabContainer">
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="ConnectionInformationTab">
        <attribute name="title">
@@ -44,7 +44,7 @@
                <bool>false</bool>
               </attribute>
               <attribute name="horizontalHeaderStretchLastSection">
-               <bool>false</bool>
+               <bool>true</bool>
               </attribute>
               <column>
                <property name="text">
@@ -391,7 +391,7 @@
            <bool>false</bool>
           </attribute>
           <attribute name="headerStretchLastSection">
-           <bool>false</bool>
+           <bool>true</bool>
           </attribute>
           <column>
            <property name="text">
@@ -565,7 +565,7 @@
   </widget>
   <action name="actionew">
    <property name="icon">
-    <iconset resource="../../../OneDrive/לימודים/אביב יב/NetAdmin/PyUIC/resources/resources.qrc">
+    <iconset>
      <normaloff>:/images/collapse_closed.png</normaloff>:/images/collapse_closed.png</iconset>
    </property>
    <property name="text">
@@ -574,7 +574,7 @@
   </action>
   <action name="actionTest_1">
    <property name="icon">
-    <iconset resource="../../../OneDrive/לימודים/אביב יב/NetAdmin/PyUIC/resources/resources.qrc">
+    <iconset>
      <normaloff>:/images/collapse_closed.png</normaloff>:/images/collapse_closed.png</iconset>
    </property>
    <property name="text">
@@ -595,7 +595,7 @@
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="../../../OneDrive/לימודים/אביב יב/NetAdmin/PyUIC/resources/resources.qrc"/>
+  <include location="../source/server/resources/resources.qrc"/>
  </resources>
  <connections/>
 </ui>

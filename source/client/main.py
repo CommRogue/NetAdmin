@@ -4,6 +4,8 @@ import os
 import orjson
 import sys
 import platform
+
+import win32com.client
 import win32com.client as com
 import wmi
 sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
@@ -118,6 +120,22 @@ def handleOpenConnection(server):
                 # send file download end status
                 client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value))))
 
+def ActualDirectorySize(path):
+    size = 0
+    try:
+        for dir in os.scandir(path):
+            try:
+                if dir.is_file():
+                    size += dir.stat().st_size
+                else:
+                    size += ActualDirectorySize(dir.path)
+            except:
+                print("Error getting size of " + dir.path)
+    except:
+        print("Error getting size of " + path)
+    return size
+
+
 @try_connection
 def main():
     # create a socket
@@ -147,6 +165,14 @@ def main():
 
         # if message is a request
         if message['type'] == NetTypes.NetRequest.value:
+            # if the request is to find the size of a directory
+            if message['data'] == NetTypes.NetDirectorySize.value:
+                # get the directory
+                directory = message['extra']
+
+                # send the size of the directory
+                s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetDirectorySize, data=NetDirectorySize(ActualDirectorySize(directory)), id=id)))
+
             # if the request is to delete a file
             if message['data'] == NetTypes.NetDeleteFile.value:
                 path = message['extra']
@@ -214,6 +240,12 @@ def main():
                 thread.start()
                 s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value), extra=server.getsockname()[1], id=id)))
 
+            # if request actual folder size
+            elif message['data'] == NetTypes.NetDirectorySize.value:
+                path = message['extra']
+                size = ActualDirectorySize(path)
+                s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectorySize, NetDirectorySize(size), id=id)))
+
             # if request a directory listing
             elif message['data'] == NetTypes.NetDirectoryListing.value:
                 # directory string is stored in the extra field of the message
@@ -248,12 +280,14 @@ def main():
                         # append NetDirectoryItems for each file/folder
                         for folder in folders:
                             try:
+                                # try to get folder size via windows scripting
                                 winfolderPath = directory+folder+"\\"
-                                winfso = com.Dispatch("Scripting.FileSystemObject")
-                                winfolder = winfso.GetFolder(winfolderPath)
+                                dispatch = com.Dispatch("Scripting.FileSystemObject")
+                                winfolder = dispatch.GetFolder(winfolderPath)
                                 size = winfolder.Size
                             except:
-                                size = None
+                                # if not successful, then use then size = -1 to signify that the folder size is not available
+                                size = -1
                             sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable, date_created=os.path.getctime(directory+folder+"\\"), size=size))
                         for file in files:
                             sMessage.items.append(NetDirectoryItem(file, directory+file, NetTypes.NetDirectoryFile.value, date_created=os.path.getctime(directory+file), last_modified=os.path.getmtime(directory+file), size=os.path.getsize(directory+file)))
