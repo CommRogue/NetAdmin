@@ -72,9 +72,10 @@ class NetDirectoryItem:
     date_created: datetime.datetime
     last_modified: datetime.datetime
     size: int
+    readable: bool
 
 
-    def __init__(self, name: str, path: str, item_type, date_created=None, last_modified=None, size=None, styling=None):
+    def __init__(self, name: str, path: str, item_type, readable, date_created=None, last_modified=None, size=None, styling=None):
         self.name = name
         self.path = path
         self.itemtype = item_type
@@ -82,6 +83,7 @@ class NetDirectoryItem:
         self.date_created = date_created
         self.last_modified = last_modified
         self.size = size
+        self.readable = readable
 
 
 @dataclasses.dataclass
@@ -170,7 +172,6 @@ class NetProtocol:
     def packNetMessage(data: NetMessage):
         data = NetProtocol.serialize(data)
         data = struct.pack(">I", len(data)) + data
-        logging.info(f"data size is {len(data)}")
         return data
 
     @staticmethod
@@ -189,7 +190,7 @@ class NetProtocol:
                 while size != len(data):
                     data += socket.recv(size-len(data))
                     iter += 1
-                logging.info(f"Received message in {iter} iterations")
+                logging.info(f"data = {str(data)}")
                 return size, data
             else:
                 return -1, -1

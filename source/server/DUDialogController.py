@@ -3,11 +3,12 @@ import threading
 
 from PyQt5.QtWidgets import QMessageBox, QFileDialog, QDialog
 import PyQt5.QtCore
-
+import functools
 import DUDialog
 from PyQt5.QtCore import pyqtSignal, QObject
 
 import GUIHelpers
+import InspectionWindowView
 import fileExplorerManager
 
 # class DUDialogController(QObject):
@@ -20,38 +21,54 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
     exec_signal = pyqtSignal()
     currentLoadingView = None
 
-    def exec_(self):
-        finished = True
+    def _exec_(self):
         totalsize = 0
-        if self.currentLoadingView is not None:
-            self.currentLoadingView.hide()
         for item in self.fileExplorerItems:
             if item.size != -1:
                 totalsize += item.size
             else:
-                finished = False
-                self.currentLoadingView = QMessageBox()
-                self.currentLoadingView.setText(f"Calculating file size for item {item.path}...")
-                self.currentLoadingView.setWindowTitle("Loading...")
-                self.currentLoadingView.setStandardButtons(QMessageBox.NoButton)
-                self.currentLoadingView.setWindowModality(PyQt5.QtCore.Qt.NonModal)
-                self.currentLoadingView.setAttribute(PyQt5.QtCore.Qt.WA_DeleteOnClose, True)
-                self.currentLoadingView.show()
+                # print current thread
+                print(threading.current_thread().name)
+                self.currentLoadingView = GUIHelpers.sizeLoadingBox(item.path)
                 thread = threading.Thread(target=fileExplorerManager.getActualDirectorySize, args=(self.model.client, item, self.exec_signal,))
                 thread.start()
-                break
-        if finished:
-            self.totalSize = totalsize
-            self.totalSizeStr = fileExplorerManager.bytesToStr(self.totalSize)
-            self.view.fileSizeText.setText(self.totalSizeStr)
-            self.view.downloadTimeText.setText(f"{round(self.totalSize / 2500000, 2)}s")
-            self.view.exec_()
+                yield
+                print(threading.current_thread().name)
+                if item.size >= 0:
+                    totalsize += item.size
+                    self.currentLoadingView.hide()
+        self.totalSize = totalsize
+        self.totalSizeStr = InspectionWindowView.bytesToStr(self.totalSize)
+        self.view.fileSizeText.setText(self.totalSizeStr)
+        self.view.downloadTimeText.setText(f"{round(self.totalSize / 2500000, 2)}s")
+        self.view.exec_()
+        yield
 
+    def exec_(self):
+        """
+        Starts the download dialog.
+        Summary of implementation:
+        This function creates an _exec_ generator and creates a partial function on the next function, giving it the instance of the generator.
+        This partial function is connected to the exec_signal, and then the function calls next on the generator.
+        Inside the generator, it iterates over the fileExplorerItems:
+            - If size is available, then it adds the size to the total size.
+            - If size is not available, then it requests a size request from the client in another thread, and passes it the exec_signal. Afterwards, it yields.
+            When the exec_signal is emitted by the worker thread, the call goes back to the yield line where the new size is checked and added to the total size.
+        """
+        # create generator
+        self._execObj = self._exec_()
+        # create callback to next function of generator
+        funcObj = functools.partial(next, self._execObj)
+        # connect the exec signal to the callback
+        self.exec_signal.connect(funcObj)
+        # start the generator
+        next(self._execObj)
 
     def __init__(self, fileExplorerItems, view=None, model=None):
         QObject.__init__(self)
         self.fileExplorerItems = fileExplorerItems
         self.totalSize = 0
+        self.downloading = False
         if len(fileExplorerItems) > 1:
             self.itemsString = f"{len(fileExplorerItems)} items"
         else:
@@ -71,7 +88,6 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
         self.bytes_downloaded = 0
         self.du_progress_signal.connect(self.on_download_progress)
         self.infobox_signal.connect(GUIHelpers.infobox)
-        self.exec_signal.connect(self.exec_)
         self.localDownloadDirectory = os.getcwd() + "\\Downloads"
 
     @staticmethod
@@ -112,6 +128,7 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
             # don't have to close since closeButtonClicked will close the window
         # download finished
         elif bytes_read == -1:
+            self.view.update_progress_bar(100)
             GUIHelpers.infobox("Download finished",
                                f'The download of "{self.itemsString}" has finished. \n It can be located at "{self.localDownloadDirectory}"')
             self.view.close()
@@ -130,21 +147,20 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
         """
         Handle the download button click event.
         """
-        # get local directory from view
-        localdir = self.localDownloadDirectory
+        if not self.downloading:
+            # get local directory from view
+            self.downloading = True
+            localdir = self.localDownloadDirectory
 
-        # get remote directory from view
-        remotedirs = self.fileExplorerItems
-        remotedirs = map(lambda x: x.path, remotedirs)
+            # get remote directory from view
+            remotedirs = self.fileExplorerItems
+            remotedirs = map(lambda x: x.path, remotedirs)
 
+            download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal, self.infobox_signal))
+            download_thread.start()
+        else:
+            GUIHelpers.infobox("Download in progress", "The download is already in progress.")
 
-        #-- # iterate over the file explorer items and check if they are collpasable. if so, then add all their children to the list
-        #-- for item in self.fileExplorerItems:
-        #--     self.resolveChildren(remotedirs, item, item.path)
-
-        # download file
-        download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal, self.infobox_signal))
-        download_thread.start()
 
     @staticmethod
     def resolveChildren(clist, item, base_path):

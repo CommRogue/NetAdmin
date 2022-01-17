@@ -120,7 +120,7 @@ def handleOpenConnection(server):
                 # send file download end status
                 client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value))))
 
-def ActualDirectorySize(path):
+def ActualDirectorySize(path, f):
     size = 0
     try:
         for dir in os.scandir(path):
@@ -128,11 +128,13 @@ def ActualDirectorySize(path):
                 if dir.is_file():
                     size += dir.stat().st_size
                 else:
-                    size += ActualDirectorySize(dir.path)
+                    size += ActualDirectorySize(dir.path, False)
             except:
                 print("Error getting size of " + dir.path)
     except:
         print("Error getting size of " + path)
+        if f:
+            return 0 # signifying that the size of all accessible files (which is no files) is 0
     return size
 
 
@@ -171,10 +173,10 @@ def main():
                 directory = message['extra']
 
                 # send the size of the directory
-                s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetDirectorySize, data=NetDirectorySize(ActualDirectorySize(directory)), id=id)))
+                s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetDirectorySize, data=NetDirectorySize(ActualDirectorySize(directory, True)), id=id)))
 
             # if the request is to delete a file
-            if message['data'] == NetTypes.NetDeleteFile.value:
+            elif message['data'] == NetTypes.NetDeleteFile.value:
                 path = message['extra']
 
                 # try to delete the path
@@ -198,7 +200,7 @@ def main():
                 else:
                     s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id)))
 
-            if message['data'] == NetTypes.NetIdentification.value: #if request to identify
+            elif message['data'] == NetTypes.NetIdentification.value: #if request to identify
                 try:
                     uid = get_id()
                 except: # will raise an exception if the key does not exist
@@ -240,11 +242,11 @@ def main():
                 thread.start()
                 s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value), extra=server.getsockname()[1], id=id)))
 
-            # if request actual folder size
-            elif message['data'] == NetTypes.NetDirectorySize.value:
-                path = message['extra']
-                size = ActualDirectorySize(path)
-                s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectorySize, NetDirectorySize(size), id=id)))
+            # # if request actual folder size
+            # elif message['data'] == NetTypes.NetDirectorySize.value:
+            #     path = message['extra']
+            #     size = ActualDirectorySize(path, True)
+            #     s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectorySize, NetDirectorySize(size), id=id)))
 
             # if request a directory listing
             elif message['data'] == NetTypes.NetDirectoryListing.value:
@@ -279,18 +281,30 @@ def main():
 
                         # append NetDirectoryItems for each file/folder
                         for folder in folders:
+                            winfolderPath = directory + folder + "\\"
                             try:
                                 # try to get folder size via windows scripting
-                                winfolderPath = directory+folder+"\\"
                                 dispatch = com.Dispatch("Scripting.FileSystemObject")
                                 winfolder = dispatch.GetFolder(winfolderPath)
                                 size = winfolder.Size
+                                readable = True
                             except:
                                 # if not successful, then use then size = -1 to signify that the folder size is not available
                                 size = -1
-                            sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable, date_created=os.path.getctime(directory+folder+"\\"), size=size))
+                                # if couldn't get size, check if the folder is inaccessible, or just subdirectories are inaccessible
+                                try:
+                                    listdir(winfolderPath)
+                                except:
+                                    readable = False
+                                else:
+                                    readable = True
+                            sMessage.items.append(NetDirectoryItem(folder, directory+folder+"\\", NetTypes.NetDirectoryFolderCollapsable, readable, date_created=os.path.getctime(directory+folder+"\\"), size=size))
                         for file in files:
-                            sMessage.items.append(NetDirectoryItem(file, directory+file, NetTypes.NetDirectoryFile.value, date_created=os.path.getctime(directory+file), last_modified=os.path.getmtime(directory+file), size=os.path.getsize(directory+file)))
+                            if os.access(directory+file, os.R_OK):
+                                readable = True
+                            else:
+                                readable = False
+                            sMessage.items.append(NetDirectoryItem(file, directory+file, NetTypes.NetDirectoryFile.value, readable, date_created=os.path.getctime(directory+file), last_modified=os.path.getmtime(directory+file), size=os.path.getsize(directory+file)))
                         s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))
 
         # if server sent an id, then set the id to it

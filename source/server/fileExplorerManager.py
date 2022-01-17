@@ -1,6 +1,8 @@
 from PyQt5.QtCore import *
+from PyQt5.QtWidgets import QPushButton
 
 import GUIHelpers
+import InspectionWindowView
 from DUDialogController import DUDialogController
 from DUDialogModel import DUDialogModel
 from InspectionWindowController import *
@@ -8,24 +10,6 @@ from source.server.InspectionWindowView import FileExplorerItem
 import logging
 import math
 import DUDialog
-
-def bytesToStr(size : int) -> str:
-    """
-    Convert file size in bytes to human readable string
-    Args:
-        size: integer of the size in bytes.
-
-    Returns: a string representing the size in human readable format.
-    """
-    if size:
-        size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-        # get size name
-        i = int(math.floor(math.log(size, 1024)))
-        # get remainder
-        p = math.pow(1024, i)
-        s = round(size / p, 2)
-        return str(f"{s} {size_name[i]}")
-    return str(size)
 
 class DirectoryDeletionAction(QRunnable):
     def __init__(self, client, selections, sUpdate, sClear, sRemove, infoboxSignal):
@@ -67,7 +51,7 @@ class DirectoryListingAction(QRunnable):
         else: #if directory is the drives (root)
             #self.view.fileViewer.insertTopLevelItem(0, QTreeWidgetItem(["Loading..."]))
             path = "" #set the path to none to get root directory listing
-        event = self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDirectoryListing, id=None, extra=path), track_event=True)
+        event = self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDirectoryListing, extra=path), track_event=True)
         event.wait()
         data = event.get_data()
 
@@ -88,19 +72,12 @@ class DirectoryListingAction(QRunnable):
                     date_modified = None
 
                 strings = [item["name"], date_created, date_modified]
-                if item["size"] and item["size"] != 0 and item["size"] != -1:
-                    strings.append(bytesToStr(item["size"]))
-                    nosize = False
-                elif item["size"] == -1:
-                    strings.append("N/A: Download to calculate")
-                    nosize = True
-                else:
-                    nosize = False
+
 
                 # emit a signal to add the item to the treeview.
                 # if no parent, then self.itemParent is None and the item will be added to the top level
                 # single-line if statement to handle the case where the item is a directory. if so, then set the collapsable argument to true
-                self.sUpdate.emit(FileExplorerItem(item["path"], True if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value else False, strings, item["size"], self.itemParent, None, nosize=nosize), self.itemParent)
+                self.sUpdate.emit(FileExplorerItem(item["path"], True if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value else False, strings, item["size"], self.itemParent, None, readable=item['readable']), self.itemParent)
         self.view.update()
 
 def getActualDirectorySize(client, item, finishedSignal):
@@ -116,14 +93,13 @@ class FileExplorerManager(QObject):
     sClearDirectoryListing = pyqtSignal(FileExplorerItem)  # parent
     sRemoveDirectoryListing = pyqtSignal(FileExplorerItem)  # child
     sInfoBox = pyqtSignal(str, str)
+    sCalculateSizeButton = pyqtSignal()
 
     def clearItemChildren(self, item):
-        print("started")
         while (item.childCount() > 0):
             child = item.child(0)
             item.removeChild(child)
             del child
-        print("finished")
 
     def __init__(self, client, view):
         super().__init__()
@@ -164,6 +140,67 @@ class FileExplorerManager(QObject):
             parent.insertChild(0, child)
         else:
             self.view.fileViewer.insertTopLevelItem(0, child)
+        if child.sizeContent == True:
+            calc_size_button = QPushButton("Calculate Size")
+            self.view.fileViewer.setItemWidget(child, 3, calc_size_button)
+            calc_size_button.clicked.connect(functools.partial(self.calculateSizeButtonClicked, child))
+
+    @staticmethod
+    def get_subtree_nodes(tree_widget_item):
+        """Returns all QTreeWidgetItems in the subtree rooted at the given node."""
+        nodes = []
+        nodes.append(tree_widget_item)
+        for i in range(tree_widget_item.childCount()):
+            nodes.extend(FileExplorerManager.get_subtree_nodes(tree_widget_item.child(i)))
+        return nodes
+
+    @staticmethod
+    def get_all_items(tree_widget):
+        """Returns all QTreeWidgetItems in the given QTreeWidget."""
+        all_items = []
+        for i in range(tree_widget.topLevelItemCount()):
+            top_item = tree_widget.topLevelItem(i)
+            all_items.extend(FileExplorerManager.get_subtree_nodes(top_item))
+        return all_items
+
+    def removeWidgetButton(self, item, col):
+        self.view.fileViewer.removeItemWidget(item, col)
+        items = self.get_all_items(self.view.fileViewer)
+        for i in items:
+            widget = self.view.fileViewer.itemWidget(i, col)
+            if widget:
+                i.setSizeHint(3, widget.sizeHint())
+        self.view.fileViewer.updateGeometries()
+
+    def _calculateSizeGenerator(self, item, signal):
+        print(threading.current_thread().name)
+        loadingView = GUIHelpers.sizeLoadingBox(item.path)
+        thread = threading.Thread(target=getActualDirectorySize, args=(self.client, item, signal))
+        thread.start()
+        yield
+        self.removeWidgetButton(item, 3)
+        item.setText(3, InspectionWindowView.bytesToStr(item.size))
+        loadingView.hide()
+        try:
+            self.sCalculateSizeButton.disconnect()
+        except:
+            logging.debug("Could not disconnect signal of calculate size button")
+        yield
+
+    def calculateSizeButtonClicked(self, item):
+        try: # check if already calculating
+            self.sCalculateSizeButton.disconnect()
+        except: # if not connected
+            # create generator
+            self._execObj = self._calculateSizeGenerator(item, self.sCalculateSizeButton)
+            # create callback to next function of generator
+            funcObj = functools.partial(next, self._execObj)
+            # connect the exec signal to the callback
+            self.sCalculateSizeButton.connect(funcObj)
+            # start the generator
+            next(self._execObj)
+        else:
+            self.infoBox("Already calculating", "Please wait until the current size calculation is finished.")
 
     def removeDirectoryListing(self, item : [FileExplorerItem]):
         # clear current selection
@@ -183,22 +220,38 @@ class FileExplorerManager(QObject):
         threadPool = QThreadPool.globalInstance()
         threadPool.start(DirectoryDeletionAction(self.client, self.selections, self.sDirectoryListingUpdate, self.sClearDirectoryListing, self.sRemoveDirectoryListing, self.sInfoBox))
 
+    @staticmethod
+    def checkDownloadable(fileExplorerItems):
+        sum = 0
+        for item in fileExplorerItems:
+            if not item.readable:
+                sum += 1
+        return sum
+
     def fileViewerDownloadButtonClicked(self):
         if self.selections:
-            DUController = DUDialogController(self.selections)
-            DUView = DUDialog.DownloadDialog(DUController)
-            DUModel = DUDialogModel(DUController, self.client)
-            # connect the view and the model to the controller
-            DUController.set_view(DUView)
-            DUController.set_model(DUModel)
+            not_downloadable = self.checkDownloadable(self.selections)
+            # check if all selections are downloadable
+            if not_downloadable == 0:
+                DUController = DUDialogController(self.selections)
+                DUView = DUDialog.DownloadDialog(DUController)
+                DUModel = DUDialogModel(DUController, self.client)
+                # connect the view and the model to the controller
+                DUController.set_view(DUView)
+                DUController.set_model(DUModel)
 
-            DUController.exec_()
+                DUController.exec_()
+            else:  # if some selections are not downloadable, show an error message
+                GUIHelpers.infobox("Download Unavailable",
+                                   f"{not_downloadable} of the {len(self.selections)} selected items are not downloadable. This may have occured because: "
+                                   f"\n1. An item selected was a folder that its children were inaccessible. Note that folders that are readable but have children that are inaccessible, will be downloaded excluding their inaccessible children. "
+                                   f"\n2. An item selected was a file that was unreadable. ")
 
     def fileViewerSelectionChanged(self):
-        """
-        Responds to the selection (click) of a file in the file explorer.
-        Args:
-            item: passed by Qt.
-        """
-        logging.debug("File explorer item changed.")
-        self.selections = self.view.fileViewer.selectedItems()
+            """
+            Responds to the selection (click) of a file in the file explorer.
+            Args:
+                item: passed by Qt.
+            """
+            logging.debug("File explorer item changed.")
+            self.selections = self.view.fileViewer.selectedItems()

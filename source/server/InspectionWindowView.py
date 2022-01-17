@@ -3,17 +3,55 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QCloseEvent, QBrush, QColor
 from PyQt5.QtCore import pyqtSignal
-
+import math
 from CustomWidgets import ClientInformationTable
 from QDetachableWidget import DetachableTabWidget
 
+def bytesToStr(size : int) -> str:
+    """
+    Convert file size in bytes to human readable string
+    Args:
+        size: integer of the size in bytes.
+
+    Returns: a string representing the size in human readable format.
+    """
+    if size:
+        size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+        # get size name
+        i = int(math.floor(math.log(size, 1024)))
+        # get remainder
+        p = math.pow(1024, i)
+        s = round(size / p, 2)
+        return str(f"{s} {size_name[i]}")
+    return str(size)
+
 class FileExplorerItem(QTreeWidgetItem):
-    def __init__(self, path, collapsable, strings, size=None, parent=None, styling=None, nosize=False):
+    def __init__(self, path, collapsable, strings, size=None, parent=None, styling=None, readable=False):
         self.size = size
+        self.readable = readable
+        self.sizeContent = False
 
         # if passed less then 4 strings, fill with empty strings
         while len(strings) < 4:
             strings.append("")
+
+        if size:
+            # if unable to get size
+            if size == -1:
+                # if can get size with 2nd method
+                if readable:
+                    self.sizeContent = True
+                # if can't get size (completely unreadable)
+                else:
+                    strings[3] = "N/A: Item Unreadable"
+            # if size OK
+            elif size > 0:
+                strings[3] = bytesToStr(size)
+            # if size is 0
+            else:
+                strings[3] = ""
+        else:
+            strings[3] = ""
 
         # if passed more then 4 strings, take only the first 4 strings
         strings = strings[:4]
@@ -21,7 +59,6 @@ class FileExplorerItem(QTreeWidgetItem):
         # modify the strings we pass to the file explorer item so if we have a None, then we replace it with an empty string
         strings = list(map(lambda name: str(name) if name is not None else "", strings))
 
-        # get str representation for the file size
         self.sizeStr = strings[3]
 
         if parent:
@@ -36,7 +73,9 @@ class FileExplorerItem(QTreeWidgetItem):
         self.path = path
         if styling:
             self.setForeground(0, QBrush(QColor(styling.color)))
-        if nosize:
+
+        # if item has N/A item unreadable, then paint it red
+        if size == -1 and not readable:
             self.setForeground(3, QBrush(QColor("crimson")))
 
 

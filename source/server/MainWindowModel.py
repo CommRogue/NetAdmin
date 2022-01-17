@@ -204,7 +204,11 @@ class Client(QObject):
     def send_message(self, data : NetMessage, track_event=False):
         if track_event: #if wants to track the response, then add an id to the message and add it to the response_events dict and return the event
             id = UniqueIDInstance.getId()
-            response_events[id] = DataEvent()
+            print(f"{id} for {str(data)}")
+            if id not in response_events.keys():
+                response_events[id] = DataEvent()
+            else:
+                raise Exception('Response event already exists')
             data.id = id #send the id to the client so it can copy it
             self._message_queue.put(NetProtocol.packNetMessage(data))
             return response_events[id]
@@ -387,10 +391,13 @@ class MessageHandler(QRunnable):
         # if so, then set the event, and optionally attach the data to it
         if self.message["id"] is not None and self.message["id"] in response_events: #check is message has response id and if it has an event associated with it
             UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
+            print(f"Response events before: {response_events}")
             if eventAttachedData is not None: #if there is data to attach to the event
                 response_events[self.message["id"]].set_data(eventAttachedData, self.message["extra"])
             response_events[self.message["id"]].set() #set the event to notify the waiting thread
             response_events.pop(self.message["id"]) #remove the event from the response events
+            print(f"Response events after: {response_events}")
+
 
 class ClientConnectionHandler(QRunnable):
     '''

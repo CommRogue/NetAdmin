@@ -14,6 +14,7 @@ class UniqueIDInstance:
             raise Exception("No more IDs available in the UniqueIDInstance")
         else:
             id = self.__unused.pop()
+            print("GIVEN ID: " + str(id))
             self.__occupied.append(id)
             self.lock.release()
             return id
@@ -23,6 +24,7 @@ class UniqueIDInstance:
         if id in self.__occupied:
             self.__occupied.remove(id)
             self.__unused.append(id)
+            print("RELEASED ID: " + str(id))
             self.lock.release()
         else:
             self.lock.release()

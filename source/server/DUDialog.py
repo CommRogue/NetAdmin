@@ -1,8 +1,4 @@
-import os
-
 from PyQt5 import QtCore, QtGui, QtWidgets
-from InspectionWindowView import FileExplorerItem
-import DUDialogController
 
 
 class DownloadDialog(QtWidgets.QDialog):

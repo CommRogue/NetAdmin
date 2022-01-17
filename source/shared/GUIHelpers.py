@@ -1,4 +1,5 @@
 from PyQt5.QtWidgets import QMessageBox
+import PyQt5.QtCore
 import logging
 
 def infobox(title, text):
@@ -8,6 +9,16 @@ def infobox(title, text):
     dialog.setWindowTitle(title)
     dialog.setStandardButtons(QMessageBox.Ok)
     dialog.exec_()
+
+def sizeLoadingBox(path):
+    messageBox = QMessageBox()
+    messageBox.setText(f"Calculating file size for item {path}...")
+    messageBox.setWindowTitle("Loading...")
+    messageBox.setStandardButtons(QMessageBox.NoButton)
+    messageBox.setWindowModality(PyQt5.QtCore.Qt.NonModal)
+    messageBox.setAttribute(PyQt5.QtCore.Qt.WA_DeleteOnClose, True)
+    messageBox.show()
+    return messageBox
 
 class MVCModel:
     def __init__(self, model=None, view=None):

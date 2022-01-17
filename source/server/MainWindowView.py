@@ -1,14 +1,8 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import Qt
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
-import sys
-import resources.qrc_resources
-from MainWindowController import MainWindowController
-from MainWindowModel import MainWindowModel
-import qtmodern.styles
-import qtmodern.windows
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
