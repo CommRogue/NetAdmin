@@ -29,7 +29,7 @@ class FileExplorerItem(QTreeWidgetItem):
     def __init__(self, path, collapsable, strings, size=None, parent=None, styling=None, readable=False):
         self.size = size
         self.readable = readable
-        self.sizeContent = False
+        self.showContextMenu = False
 
         # if passed less then 4 strings, fill with empty strings
         while len(strings) < 4:
@@ -40,7 +40,8 @@ class FileExplorerItem(QTreeWidgetItem):
             if size == -1:
                 # if can get size with 2nd method
                 if readable:
-                    self.sizeContent = True
+                    self.showContextMenu = True
+                    strings[3] = "Partially readable: go to context menu to calculate"
                 # if can't get size (completely unreadable)
                 else:
                     strings[3] = "N/A: Item Unreadable"
@@ -74,9 +75,13 @@ class FileExplorerItem(QTreeWidgetItem):
         if styling:
             self.setForeground(0, QBrush(QColor(styling.color)))
 
-        # if item has N/A item unreadable, then paint it red
-        if size == -1 and not readable:
-            self.setForeground(3, QBrush(QColor("crimson")))
+        # if item has N/A item unreadable, then paint it red, else paint green if readable but size -1
+        if size == -1:
+            if readable:
+                self.setForeground(3, QBrush(QColor("darkorange")))
+            else:
+                self.setForeground(3, QBrush(QColor("crimson")))
+
 
 
 class ClientInspectorView(QMainWindow):
@@ -113,7 +118,7 @@ class ClientInspectorView(QMainWindow):
 
     def setupUi(self, ClientInspectionWindow):
         ClientInspectionWindow.setObjectName("ClientInspectionWindow")
-        ClientInspectionWindow.resize(795, 596)
+        ClientInspectionWindow.resize(795, 630)
         self.centralwidget = QtWidgets.QWidget(ClientInspectionWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout_10 = QtWidgets.QVBoxLayout(self.centralwidget)
@@ -314,6 +319,33 @@ class ClientInspectorView(QMainWindow):
         self.fileViewer.header().setSortIndicatorShown(False)
         self.fileViewer.header().setStretchLastSection(True)
         self.verticalLayout_2.addWidget(self.fileViewer)
+        self.groupBox_3 = QtWidgets.QGroupBox(self.FileExplorerTab)
+        self.groupBox_3.setCheckable(False)
+        self.groupBox_3.setObjectName("groupBox_3")
+        self.horizontalLayout_3 = QtWidgets.QHBoxLayout(self.groupBox_3)
+        self.horizontalLayout_3.setObjectName("horizontalLayout_3")
+        self.radioButton_2 = QtWidgets.QRadioButton(self.groupBox_3)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.radioButton_2.sizePolicy().hasHeightForWidth())
+        self.radioButton_2.setSizePolicy(sizePolicy)
+        self.radioButton_2.setChecked(True)
+        self.radioButton_2.setObjectName("radioButton_2")
+        self.buttonGroup = QtWidgets.QButtonGroup(ClientInspectionWindow)
+        self.buttonGroup.setObjectName("buttonGroup")
+        self.buttonGroup.addButton(self.radioButton_2)
+        self.horizontalLayout_3.addWidget(self.radioButton_2)
+        self.radioButton = QtWidgets.QRadioButton(self.groupBox_3)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.radioButton.sizePolicy().hasHeightForWidth())
+        self.radioButton.setSizePolicy(sizePolicy)
+        self.radioButton.setObjectName("radioButton")
+        self.buttonGroup.addButton(self.radioButton)
+        self.horizontalLayout_3.addWidget(self.radioButton)
+        self.verticalLayout_2.addWidget(self.groupBox_3)
         self.TabContainer.addTab(self.FileExplorerTab, "")
         self.CommandLineTab = QtWidgets.QWidget()
         self.CommandLineTab.setObjectName("CommandLineTab")
@@ -406,7 +438,7 @@ class ClientInspectorView(QMainWindow):
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi(ClientInspectionWindow)
-        self.TabContainer.setCurrentIndex(2)
+        self.TabContainer.setCurrentIndex(1)
         self.ShellTabContainer.setCurrentIndex(-1)
         QtCore.QMetaObject.connectSlotsByName(ClientInspectionWindow)
 
@@ -438,6 +470,9 @@ class ClientInspectorView(QMainWindow):
         self.fileViewer.headerItem().setText(1, _translate("ClientInspectionWindow", "Created"))
         self.fileViewer.headerItem().setText(2, _translate("ClientInspectionWindow", "Last Modified"))
         self.fileViewer.headerItem().setText(3, _translate("ClientInspectionWindow", "Size"))
+        self.groupBox_3.setTitle(_translate("ClientInspectionWindow", "Directory Crawler Method"))
+        self.radioButton_2.setText(_translate("ClientInspectionWindow", "WinScript"))
+        self.radioButton.setText(_translate("ClientInspectionWindow", "Recursive (resolves permission errors)"))
         self.TabContainer.setTabText(self.TabContainer.indexOf(self.FileExplorerTab),
                                      _translate("ClientInspectionWindow", "File Explorer"))
         self.TabContainer.setTabText(self.TabContainer.indexOf(self.CommandLineTab),

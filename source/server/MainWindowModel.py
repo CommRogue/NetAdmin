@@ -391,12 +391,12 @@ class MessageHandler(QRunnable):
         # if so, then set the event, and optionally attach the data to it
         if self.message["id"] is not None and self.message["id"] in response_events: #check is message has response id and if it has an event associated with it
             UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
-            print(f"Response events before: {response_events}")
+            # print(f"Response events before: {response_events}")
             if eventAttachedData is not None: #if there is data to attach to the event
                 response_events[self.message["id"]].set_data(eventAttachedData, self.message["extra"])
             response_events[self.message["id"]].set() #set the event to notify the waiting thread
             response_events.pop(self.message["id"]) #remove the event from the response events
-            print(f"Response events after: {response_events}")
+            # print(f"Response events after: {response_events}")
 
 
 class ClientConnectionHandler(QRunnable):

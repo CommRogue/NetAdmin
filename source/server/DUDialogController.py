@@ -37,6 +37,10 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
                 if item.size >= 0:
                     totalsize += item.size
                     self.currentLoadingView.hide()
+                    # set the size of the file explorer item with the calculated size
+                    fileExplorerManager.FileExplorerManager.redrawItemSize(item, 3)
+                    # don't show the calculate size menu option anymore
+                    item.showContextMenu = False
         self.totalSize = totalsize
         self.totalSizeStr = InspectionWindowView.bytesToStr(self.totalSize)
         self.view.fileSizeText.setText(self.totalSizeStr)

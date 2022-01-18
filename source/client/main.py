@@ -1,6 +1,8 @@
 import threading
 import socket
 import os
+import time
+
 import orjson
 import sys
 import platform
@@ -173,7 +175,10 @@ def main():
                 directory = message['extra']
 
                 # send the size of the directory
-                s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetDirectorySize, data=NetDirectorySize(ActualDirectorySize(directory, True)), id=id)))
+                start = datetime.datetime.now()
+                actualCall = ActualDirectorySize(directory, True)
+                print(f"Manual method for {directory}: {datetime.datetime.now() - start}")
+                s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetDirectorySize, data=NetDirectorySize(actualCall), id=id)))
 
             # if the request is to delete a file
             elif message['data'] == NetTypes.NetDeleteFile.value:
@@ -278,16 +283,23 @@ def main():
                     # if got directory listing (we have permission)
                     else:
                         sMessage = NetDirectoryListing(directory, [])
-
+                        ctime = datetime.datetime.now()
                         # append NetDirectoryItems for each file/folder
                         for folder in folders:
                             winfolderPath = directory + folder + "\\"
                             try:
+
                                 # try to get folder size via windows scripting
+
                                 dispatch = com.Dispatch("Scripting.FileSystemObject")
                                 winfolder = dispatch.GetFolder(winfolderPath)
                                 size = winfolder.Size
                                 readable = True
+
+                                # # --manual method
+                                # size = ActualDirectorySize(winfolderPath, True)
+                                # readable = True
+
                             except:
                                 # if not successful, then use then size = -1 to signify that the folder size is not available
                                 size = -1
@@ -305,6 +317,7 @@ def main():
                             else:
                                 readable = False
                             sMessage.items.append(NetDirectoryItem(file, directory+file, NetTypes.NetDirectoryFile.value, readable, date_created=os.path.getctime(directory+file), last_modified=os.path.getmtime(directory+file), size=os.path.getsize(directory+file)))
+                        print(f"WinScript Method for {directory}: ", datetime.datetime.now() - ctime)
                         s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))
 
         # if server sent an id, then set the id to it

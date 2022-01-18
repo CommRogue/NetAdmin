@@ -1,5 +1,7 @@
+from PyQt5 import QtCore
 from PyQt5.QtCore import *
-from PyQt5.QtWidgets import QPushButton
+from PyQt5.QtGui import QBrush, QColor
+from PyQt5.QtWidgets import QPushButton, QMenu
 
 import GUIHelpers
 import InspectionWindowView
@@ -51,10 +53,12 @@ class DirectoryListingAction(QRunnable):
         else: #if directory is the drives (root)
             #self.view.fileViewer.insertTopLevelItem(0, QTreeWidgetItem(["Loading..."]))
             path = "" #set the path to none to get root directory listing
+        start = datetime.datetime.now()
         event = self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDirectoryListing, extra=path), track_event=True)
         event.wait()
         data = event.get_data()
-
+        print(f"Total : {datetime.datetime.now() - start}")
+        start = datetime.datetime.now()
         if self.itemParent:  # if a directory, then clear the "Loading..." item or the previous items from the last click
             self.sClear.emit(self.itemParent)
 
@@ -79,6 +83,7 @@ class DirectoryListingAction(QRunnable):
                 # single-line if statement to handle the case where the item is a directory. if so, then set the collapsable argument to true
                 self.sUpdate.emit(FileExplorerItem(item["path"], True if item['itemtype'] == NetTypes.NetDirectoryFolderCollapsable.value else False, strings, item["size"], self.itemParent, None, readable=item['readable']), self.itemParent)
         self.view.update()
+        print(f"Total 2: {datetime.datetime.now() - start}")
 
 def getActualDirectorySize(client, item, finishedSignal):
     event = client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDirectorySize, extra=item.path), track_event=True)
@@ -93,7 +98,7 @@ class FileExplorerManager(QObject):
     sClearDirectoryListing = pyqtSignal(FileExplorerItem)  # parent
     sRemoveDirectoryListing = pyqtSignal(FileExplorerItem)  # child
     sInfoBox = pyqtSignal(str, str)
-    sCalculateSizeButton = pyqtSignal()
+    sCalculateSizeSignal = pyqtSignal()
 
     def clearItemChildren(self, item):
         while (item.childCount() > 0):
@@ -104,6 +109,7 @@ class FileExplorerManager(QObject):
     def __init__(self, client, view):
         super().__init__()
         self.view = view
+        self.calculatingSize = False
         self.fileExplorerInitialized = False
         self.sClearDirectoryListing.connect(self.clearDirectoryListing)
         self.sDirectoryListingUpdate.connect(self.updateDirectoryListing)
@@ -113,6 +119,8 @@ class FileExplorerManager(QObject):
         self.view.fileViewer.itemSelectionChanged.connect(self.fileViewerSelectionChanged)
         self.view.deleteButton.clicked.connect(self.fileViewerDeleteButtonClicked)
         self.view.downloadButton.clicked.connect(self.fileViewerDownloadButtonClicked)
+        self.view.fileViewer.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.view.fileViewer.customContextMenuRequested.connect(self.customContextMenuRequested)
         self.selections = None
         self.client = client
 
@@ -132,18 +140,24 @@ class FileExplorerManager(QObject):
         """
         return self.fileExplorerInitialized
 
+    @pyqtSlot(FileExplorerItem)
     def clearDirectoryListing(self, parent : FileExplorerItem):
         self.clearItemChildren(parent)
 
+    def customContextMenuRequested(self, pos : QPoint):
+        item = self.view.fileViewer.itemAt(pos)
+        if item:
+            if item.showContextMenu == True:
+                menu = QMenu("Item Actions", self.view.fileViewer)
+                menu.addAction("Calculate size...", functools.partial(self.calculateSizeButtonClicked, item))
+                menu.exec(self.view.fileViewer.viewport().mapToGlobal(pos))
+
+    @pyqtSlot(FileExplorerItem, FileExplorerItem)
     def updateDirectoryListing(self, child : FileExplorerItem, parent: FileExplorerItem):
         if parent:
             parent.insertChild(0, child)
         else:
             self.view.fileViewer.insertTopLevelItem(0, child)
-        if child.sizeContent == True:
-            calc_size_button = QPushButton("Calculate Size")
-            self.view.fileViewer.setItemWidget(child, 3, calc_size_button)
-            calc_size_button.clicked.connect(functools.partial(self.calculateSizeButtonClicked, child))
 
     @staticmethod
     def get_subtree_nodes(tree_widget_item):
@@ -172,31 +186,37 @@ class FileExplorerManager(QObject):
                 i.setSizeHint(3, widget.sizeHint())
         self.view.fileViewer.updateGeometries()
 
+    @staticmethod
+    def redrawItemSize(item : QTreeWidgetItem, col) -> None:
+        item.setData(col, QtCore.Qt.ForegroundRole, None)
+        item.setText(col, InspectionWindowView.bytesToStr(item.size))
+
     def _calculateSizeGenerator(self, item, signal):
         print(threading.current_thread().name)
         loadingView = GUIHelpers.sizeLoadingBox(item.path)
         thread = threading.Thread(target=getActualDirectorySize, args=(self.client, item, signal))
         thread.start()
         yield
-        self.removeWidgetButton(item, 3)
-        item.setText(3, InspectionWindowView.bytesToStr(item.size))
+        # no need anymore since no buttons
+        # self.removeWidgetButton(item, 3)
+
+        # reset colors of size text
+        self.redrawItemSize(item, 3)
         loadingView.hide()
-        try:
-            self.sCalculateSizeButton.disconnect()
-        except:
-            logging.debug("Could not disconnect signal of calculate size button")
+        self.calculatingSize = False
+        # don't show calculate size context menu item anymore
+        item.showContextMenu = False
         yield
 
     def calculateSizeButtonClicked(self, item):
-        try: # check if already calculating
-            self.sCalculateSizeButton.disconnect()
-        except: # if not connected
+        if not self.calculatingSize: # if not already calculating
+            self.calculatingSize = True
             # create generator
-            self._execObj = self._calculateSizeGenerator(item, self.sCalculateSizeButton)
+            self._execObj = self._calculateSizeGenerator(item, self.sCalculateSizeSignal)
             # create callback to next function of generator
             funcObj = functools.partial(next, self._execObj)
             # connect the exec signal to the callback
-            self.sCalculateSizeButton.connect(funcObj)
+            self.sCalculateSizeSignal.connect(funcObj)
             # start the generator
             next(self._execObj)
         else:
