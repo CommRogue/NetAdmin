@@ -28,7 +28,9 @@ class NetTypes(Enum):
     NetDirectorySize = 16
     NetRemoteControl = 17
     NetKeyboardAction = 18
-    NetMouseAction = 19
+    NetMouseMoveAction = 19
+    NetMouseClickDownAction = 20
+    NetMouseClickUpAction = 21
 
 class NetStatusTypes(Enum):
     NetOK = 0
