@@ -7,6 +7,8 @@ import mss
 import orjson
 import sys
 import platform
+
+import pyautogui
 from PIL import Image
 import win32com.client
 import win32com.client as com
@@ -202,6 +204,10 @@ def main():
 
         # if message is a request
         if message['type'] == NetTypes.NetRequest.value:
+            if message['data'] == NetTypes.NetKeyboardAction.value:
+                print(f"Keyboard action request from {message['extra']}")
+                pyautogui.press(message['extra'])
+
             # if the request is to find the size of a directory
             if message['data'] == NetTypes.NetDirectorySize.value:
                 # get the directory

@@ -1,3 +1,4 @@
+import ipaddress
 import os
 import sys
 import typing
@@ -296,10 +297,10 @@ class MessageHandler(QRunnable):
 
         # unpack the message from bytes (done here so unpacking is done by the thread and not the communicator)
         self.message = orjson.loads(self._message_bytes)
-        str = f"{self.client.address} MessageHandler running with message {NetTypes(self.message['type'])}"
+        alertstr = f"{self.client.address} MessageHandler running with message {NetTypes(self.message['type'])}"
         if self.message['type'] == NetTypes.NetStatus.value:
-            str += f", {NetStatusTypes(self.message['data']['statusCode'])}"
-        logging.debug(str)
+            alertstr += f", {NetStatusTypes(self.message['data']['statusCode'])}"
+        logging.debug(alertstr)
 
 
         # --- start of message handling ---
@@ -432,7 +433,7 @@ class ClientConnectionHandler(QRunnable):
             return
 
         #if the client identified, resolve the client's IP address
-        if self.client.address[0] != "127.0.0.1": # if not our own computer, then resolve the IP address
+        if self.client.address[0] != "127.0.0.1" and ipaddress.ip_address(self.client.address[0]).is_private != True: # if not our own computer or local IP on our network, then resolve the IP address
             response = urlopen(f"http://ipwhois.app/json/{self.client.address[0]}")
         else: # otherwise resolve our own IP address
             response = urlopen("http://ipwhois.app/json/")

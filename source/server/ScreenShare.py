@@ -6,6 +6,7 @@ from PIL import Image
 from NetProtocol import *
 import OpenConnectionHelpers
 
+keys = {name : value for value, name in vars(pygame.constants).items() if type(name) == int and value.startswith('K_')}
 
 def recvall(conn, length):
     """ Retreive all pixels. """
@@ -33,6 +34,9 @@ def main(client):
                     if event.type == pygame.QUIT:
                         pygame.quit()
                         return
+                    if event.type == pygame.KEYDOWN:
+                        print(f"Key pressed: {keys[event.key]}")
+                        client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetKeyboardAction, extra=keys[event.key][2:]))
                 size = conn.recv(4)
                 size = int.from_bytes(size, byteorder='big')
                 pixels = recvall(conn, size)

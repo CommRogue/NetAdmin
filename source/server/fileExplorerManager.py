@@ -203,6 +203,11 @@ class FileExplorerManager(QObject):
         # reset colors of size text
         self.redrawItemSize(item, 3)
         loadingView.hide()
+        # reset callback signal and calculatesize bool enabler
+        try:
+            signal.disconnect()
+        except:
+            print("Failed to disconnect getActualDirectorySize signal...")
         self.calculatingSize = False
         # don't show calculate size context menu item anymore
         item.showContextMenu = False
