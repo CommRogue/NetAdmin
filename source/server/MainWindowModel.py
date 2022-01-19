@@ -152,19 +152,6 @@ class DataEvent(threading.Event):
         return self.extra
 
 class Client(QObject):
-    #synchronization objects
-    #uuid of the client
-    uuid = None
-
-    #condition to tell the ConnectionHandler that client identified
-    identificationNotification = threading.Condition()
-
-    #custom write-read lock for each client so data can be read by multiple threads and written by only one thread at the same time
-    dataLock = SocketLock.SocketLock()
-
-    #queue for storing messages to be sent to the client by the select.select loop
-    _message_queue = queue.Queue()
-
     # Data segments
     # ---------------
     connectionData = None
@@ -194,6 +181,18 @@ class Client(QObject):
         self._socket = socket
         self.address = address
         self._socket_lock = threading.Lock()
+
+        # synchronization objects
+        # uuid of the client
+        self.uuid = None
+
+        # condition to tell the ConnectionHandler that client identified
+        self.identificationNotification = threading.Condition()
+
+        # custom write-read lock for each client so data can be read by multiple threads and written by only one thread at the same time
+        self.dataLock = SocketLock.SocketLock()
+        # queue for storing messages to be sent to the client by the select.select loop
+        self._message_queue = queue.Queue()
 
     def close(self):
         """

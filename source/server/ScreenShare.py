@@ -37,6 +37,9 @@ def main(client):
                     if event.type == pygame.KEYDOWN:
                         print(f"Key pressed: {keys[event.key]}")
                         client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetKeyboardAction, extra=keys[event.key][2:]))
+                    if event.type == pygame.MOUSEMOTION:
+                        mouse_pos = pygame.mouse.get_pos()
+                        client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseAction, extra=mouse_pos))
                 size = conn.recv(4)
                 size = int.from_bytes(size, byteorder='big')
                 pixels = recvall(conn, size)

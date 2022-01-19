@@ -208,8 +208,12 @@ def main():
                 print(f"Keyboard action request from {message['extra']}")
                 pyautogui.press(message['extra'])
 
+            elif message['data'] == NetTypes.NetMouseAction.value:
+                print(f"Mouse action request from {message['extra']}")
+                pyautogui.moveTo(message['extra'][0], message['extra'][1])
+
             # if the request is to find the size of a directory
-            if message['data'] == NetTypes.NetDirectorySize.value:
+            elif message['data'] == NetTypes.NetDirectorySize.value:
                 # get the directory
                 directory = message['extra']
 
