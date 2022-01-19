@@ -351,7 +351,7 @@ class ClientInspectorView(QMainWindow):
         self.CommandLineTab.setObjectName("CommandLineTab")
         self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.CommandLineTab)
         self.verticalLayout_3.setObjectName("verticalLayout_3")
-        self.ShellTabContainer = QtWidgets.QTabWidget(self.CommandLineTab)
+        self.ShellTabContainer = DetachableTabWidget(self.CommandLineTab)
         self.ShellTabContainer.setTabsClosable(True)
         self.ShellTabContainer.setMovable(True)
         self.ShellTabContainer.setTabBarAutoHide(False)
@@ -438,7 +438,7 @@ class ClientInspectorView(QMainWindow):
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi(ClientInspectionWindow)
-        self.TabContainer.setCurrentIndex(1)
+        self.TabContainer.setCurrentIndex(2)
         self.ShellTabContainer.setCurrentIndex(-1)
         QtCore.QMetaObject.connectSlotsByName(ClientInspectionWindow)
 

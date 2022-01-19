@@ -18,7 +18,7 @@
     <item>
      <widget class="QTabWidget" name="TabContainer">
       <property name="currentIndex">
-       <number>1</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="ConnectionInformationTab">
        <attribute name="title">
@@ -470,7 +470,7 @@
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_3">
         <item>
-         <widget class="QTabWidget" name="ShellTabContainer">
+         <widget class="DetachableTabWidget" name="ShellTabContainer">
           <property name="currentIndex">
            <number>-1</number>
           </property>
@@ -639,6 +639,12 @@
    <class>ClientInformationTable</class>
    <extends>QTableWidget</extends>
    <header>CustomWidgets.h</header>
+  </customwidget>
+  <customwidget>
+   <class>DetachableTabWidget</class>
+   <extends>QTabWidget</extends>
+   <header>detachabletabwidget.h</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources>

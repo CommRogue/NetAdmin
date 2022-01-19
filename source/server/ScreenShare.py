@@ -41,9 +41,11 @@ def main(client):
                         mouse_pos = pygame.mouse.get_pos()
                         client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseMoveAction, extra=mouse_pos))
                     if event.type == pygame.MOUSEBUTTONDOWN:
-                        client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickDownAction, extra=event.button))
+                        mouse_pos = pygame.mouse.get_pos()
+                        client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickDownAction, extra=(event.button, mouse_pos[0], mouse_pos[1])))
                     if event.type == pygame.MOUSEBUTTONUP:
-                        client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickUpAction, extra=event.button))
+                        mouse_pos = pygame.mouse.get_pos()
+                        client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickUpAction, extra=(event.button, mouse_pos[0], mouse_pos[1])))
                 size = conn.recv(4)
                 size = int.from_bytes(size, byteorder='big')
                 pixels = recvall(conn, size)

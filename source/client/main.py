@@ -221,10 +221,10 @@ def main():
 
             elif message['data'] == NetTypes.NetMouseClickUpAction.value:
                 print(f"Mouse click up action request from {message['extra']}")
-                if message['extra'] == "0":
-                    pyautogui.mouseUp("left")
+                if message['extra'][0] == "0":
+                    pyautogui.mouseUp(button="left", x=message['extra'][1], y=message['extra'][2])
                 else:
-                    pyautogui.mouseUp("right")
+                    pyautogui.mouseUp(button="right", x=message['extra'][1], y=message['extra'][2])
 
             # if the request is to find the size of a directory
             elif message['data'] == NetTypes.NetDirectorySize.value:
