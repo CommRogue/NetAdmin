@@ -339,7 +339,8 @@ class MessageHandler(QRunnable):
             # if new client wants identification
             else:
                 # generate a new uuid
-                cid = str(uuid.uuid4())
+                uid = uuid.uuid4().hex
+                cid = uid
                 logging.info(f"Client {self.client.address} sent identification request. Generating new ID {cid} and sending...")
 
                 #send the new id to the client, add it to the database, and request the client to authunticate again

@@ -10,7 +10,7 @@ from NetProtocol import *
 
 #create a socket
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect(("127.0.0.1", 4959))
+s.connect(("192.168.1.205", 4959))
 computer = wmi.WMI()
 
 

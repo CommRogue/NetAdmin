@@ -179,7 +179,7 @@ def ActualDirectorySize(path, f):
 def main():
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("127.0.0.1", 49152))
+    s.connect(("192.168.1.205", 49152))
 
     computer = wmi.WMI()
 
@@ -214,14 +214,14 @@ def main():
 
             elif message['data'] == NetTypes.NetMouseClickDownAction.value:
                 print(f"Mouse click down action request from {message['extra']}")
-                if message['extra'] == "1":
-                    pyautogui.mouseDown("left")
+                if message['extra'][0] == 1:
+                    pyautogui.mouseDown(button="left", x=message['extra'][1], y=message['extra'][2])
                 else:
-                    pyautogui.mouseDown("right")
+                    pyautogui.mouseDown(button="right", x=message['extra'][1], y=message['extra'][2])
 
             elif message['data'] == NetTypes.NetMouseClickUpAction.value:
                 print(f"Mouse click up action request from {message['extra']}")
-                if message['extra'][0] == "0":
+                if message['extra'][0] == 1:
                     pyautogui.mouseUp(button="left", x=message['extra'][1], y=message['extra'][2])
                 else:
                     pyautogui.mouseUp(button="right", x=message['extra'][1], y=message['extra'][2])
