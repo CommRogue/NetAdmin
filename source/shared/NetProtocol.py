@@ -26,6 +26,7 @@ class NetTypes(Enum):
     NetCloseConnection = 14
     NetOpenShell = 15
     NetDirectorySize = 16
+    NetRemoteControl = 17
 
 class NetStatusTypes(Enum):
     NetOK = 0

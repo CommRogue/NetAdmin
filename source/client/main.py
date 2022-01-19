@@ -2,11 +2,12 @@ import threading
 import socket
 import os
 import time
-
+import io
+import mss
 import orjson
 import sys
 import platform
-
+from PIL import Image
 import win32com.client
 import win32com.client as com
 import wmi
@@ -73,6 +74,31 @@ def receive(sock, proc):
         proc.stdin.write("\n".encode())
         proc.stdin.flush()
 
+def screenShareClient(conn):
+    rect = {'top': 0, 'left': 0, 'width': 1920, 'height': 1080}
+    with mss.mss() as sct:
+        # The region to capture
+        i = 0
+        start = time.time()
+        while True:
+            if i == 30:
+                print('30 frames in {} seconds'.format(time.time() - start))
+                i = 0
+                start = time.time()
+            i += 1
+            image = sct.grab(rect)
+            buffer = io.BytesIO()
+            im = Image.frombytes('RGB', image.size, image.rgb)
+            im.save(buffer, format="JPEG", quality=75)
+            # Send the size of the pixels length
+
+            # Send pixels
+            buffer.seek(0)
+            g = buffer.read()
+            conn.send(len(g).to_bytes(4, "big"))
+            conn.send(g)
+
+
 @try_connection
 def handleOpenConnection(server):
     client, address = server.accept()
@@ -97,6 +123,13 @@ def handleOpenConnection(server):
                 print(f"Closing unmanaged connection {address}")
                 server.close()
                 break
+
+            elif message['data'] == NetTypes.NetRemoteControl.value:
+                print(f"Remote control request from {address}")
+                # send response to client
+                client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatusTypes.NetOK, id=id)))
+                # open screenshare
+                screenShareClient(client)
 
             # if the request is to open a shell connection
             elif message['data'] == NetTypes.NetOpenShell.value:
