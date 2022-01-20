@@ -1,8 +1,6 @@
 import socket
-import typing
-
-import orjson
-
+import os, sys
+sys.path.insert(1, os.path.join(sys.path[0], '../server'))
 import MainWindowModel
 from NetProtocol import *
 import os
