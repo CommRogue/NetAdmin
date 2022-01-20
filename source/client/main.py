@@ -218,26 +218,27 @@ def main():
                     pyautogui.mouseDown(button="left", x=message['extra'][1], y=message['extra'][2])
                 elif message['extra'][0] == 3:
                     pyautogui.mouseDown(button="right", x=message['extra'][1], y=message['extra'][2])
+                elif message['extra'][0] >= 4:
+                    if message['extra'][0] % 2 == 1:
+                        pyautogui.scroll(-50)
+                    else:
+                        pyautogui.scroll(50)
                 elif message['extra'][0] == 2:
                     pyautogui.middleClick()
-                elif message['extra'][0] == 5:
-                    pyautogui.scroll(-50)
-                elif message['extra'][0] == 4:
-                    pyautogui.scroll(50)
 
 
             elif message['data'] == NetTypes.NetMouseClickUpAction.value:
                 print(f"Mouse click up action request from {message['extra']}")
                 if message['extra'][0] == 1:
                     pyautogui.mouseUp(button="left", x=message['extra'][1], y=message['extra'][2])
-                elif message['extra'][0] == 2:
-                    pyautogui.middleClick()
                 elif message['extra'][0] == 3:
                     pyautogui.mouseUp(button="right", x=message['extra'][1], y=message['extra'][2])
                 elif message['extra'][0] == 5:
                     pyautogui.scroll(-50)
                 elif message['extra'][0] == 4:
                     pyautogui.scroll(50)
+                elif message['extra'][0] == 2:
+                    pyautogui.middleClick()
             # if the request is to find the size of a directory
             elif message['data'] == NetTypes.NetDirectorySize.value:
                 # get the directory
