@@ -3,7 +3,10 @@ import socket
 import os
 import time
 import io
+
+import cv2
 import mss
+import numpy
 import orjson
 import sys
 import platform
@@ -22,6 +25,9 @@ import win32api
 from os import listdir
 from os.path import isfile, join
 from OpenConnectionHelpers import *
+from turbojpeg import TurboJPEG
+
+jpeg = TurboJPEG()
 
 def set_id(id):
     """
@@ -76,6 +82,7 @@ def receive(sock, proc):
         proc.stdin.write("\n".encode())
         proc.stdin.flush()
 
+@profile
 def screenShareClient(conn):
     rect = {'top': 0, 'left': 0, 'width': 1920, 'height': 1080}
     with mss.mss() as sct:
@@ -88,17 +95,44 @@ def screenShareClient(conn):
                 i = 0
                 start = time.time()
             i += 1
-            image = sct.grab(rect)
-            buffer = io.BytesIO()
-            im = Image.frombytes('RGB', image.size, image.rgb)
-            im.save(buffer, format="JPEG", quality=75)
+            image = numpy.array(sct.grab(rect))
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            image = jpeg.encode(image, quality=75)
+            # buffer = io.BytesIO()
+            # im = Image.frombytes('RGB', image.size, image.rgb)
+            # im.save(buffer, format="JPEG", quality=75)
             # Send the size of the pixels length
 
-            # Send pixels
-            buffer.seek(0)
-            g = buffer.read()
-            conn.send(len(g).to_bytes(4, "big"))
-            conn.send(g)
+            # # Send pixels
+            # buffer.seek(0)
+            # g = buffer.read()
+            conn.send(len(image).to_bytes(4, "big"))
+            conn.send(image)
+
+
+# def screenShareClient(conn):
+#     rect = {'top': 0, 'left': 0, 'width': 1920, 'height': 1080}
+#     with mss.mss() as sct:
+#         # The region to capture
+#         i = 0
+#         start = time.time()
+#         while True:
+#             if i == 30:
+#                 print('30 frames in {} seconds'.format(time.time() - start))
+#                 i = 0
+#                 start = time.time()
+#             i += 1
+#             image = sct.grab(rect)
+#             buffer = io.BytesIO()
+#             im = Image.frombytes('RGB', image.size, image.rgb)
+#             im.save(buffer, format="JPEG", quality=75)
+#             # Send the size of the pixels length
+#
+#             # Send pixels
+#             buffer.seek(0)
+#             g = buffer.read()
+#             conn.send(len(g).to_bytes(4, "big"))
+#             conn.send(g)
 
 
 @try_connection
