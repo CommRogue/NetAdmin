@@ -1,3 +1,5 @@
+import abc
+
 from PyQt5.QtWidgets import QMessageBox
 import PyQt5.QtCore
 import logging
@@ -41,3 +43,9 @@ class MVCModel:
             model: the model of the controller.
         """
         self.model = model
+
+class TabManager(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def tab_entered(self): pass
+    @abc.abstractmethod
+    def tab_closed(self): pass

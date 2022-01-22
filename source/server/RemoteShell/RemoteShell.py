@@ -1,8 +1,9 @@
+import GUIHelpers
 from RemoteShellModel import RemoteShellModel
 from RemoteShellView import RemoteShellView
 from RemoteShellController import RemoteShellController
 
-class RemoteShellManager:
+class RemoteShellManager(GUIHelpers.TabManager):
     def __init__(self, client, inspector_controller):
         self.inspector_controller = inspector_controller
         self.inspector_controller.view.ShellTabContainer.tabCloseRequested.connect(self.tabCloseRequested)
@@ -23,6 +24,8 @@ class RemoteShellManager:
     def tab_entered(self):
         if len(self.remote_shell_list) == 0:
             self.create_shell()
+
+    def tab_closed(self):pass
 
     def tabCloseRequested(self, index):
         self.remote_shell_list[index].stop()
