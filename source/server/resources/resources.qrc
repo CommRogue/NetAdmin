@@ -1,6 +1,7 @@
 <RCC>
   <qresource>
     <file>images/loading-934433.png</file>
+    <file>images/refresh-2-64 (1).ico</file>
     <file alias="deleteIcon">images/delete.png</file>
     <file alias="openIcon">images/open.png</file>
     <file alias="flag-AD">images/flags/AD.png</file>

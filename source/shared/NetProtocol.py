@@ -174,18 +174,35 @@ class NetProtocol:
         return wrapper
 
     @staticmethod
-    def packNetMessage(data: NetMessage):
+    def packNetMessage(data: NetMessage) -> bytes:
+        """
+        Pack a NetMessage into a byte array that has its length appended to the front of it.
+        Args:
+            data: NetMessage to pack.
+
+        Returns: the message packed as bytes, with its length appended to the front.
+
+        """
         data = NetProtocol.serialize(data)
         data = struct.pack(">I", len(data)) + data
         return data
 
     @staticmethod
-    def unpackFromSocket(socket):
+    def unpackFromSocket(socket) -> (int, bytes):
+        """
+        Reads the size of the message from the socket, then reads the message from the socket.
+        Args:
+            socket: the socket to read the message from.
+
+        Returns:
+            size: the number of bytes read. (of the message itself, not including the size prefix)
+            message: the bytes of the message that was read.
+        """
         try:
             # receive the message size as a 4 byte integer
             size = socket.recv(4)
             size = struct.unpack(">I", size)[0]
-            logging.info("Unpacked message size: %s" % size)
+            logging.debug("Unpacked message size: %s" % size)
         except ConnectionError or struct.error:
             return -1, -1
         else:

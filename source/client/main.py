@@ -68,8 +68,8 @@ def try_connection(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (ConnectionAbortedError, ConnectionResetError):
-            print("Connection disconnected by server without message")
+        except (ConnectionAbortedError, ConnectionResetError, OSError):
+            print(f"THREAD {threading.current_thread().name} [FUNC {func.__name__}]: Connection disconnected by server without message.")
     return wrapper
 
 @try_connection
@@ -82,7 +82,8 @@ def receive(sock, proc):
         proc.stdin.write("\n".encode())
         proc.stdin.flush()
 
-@profile
+@try_connection
+#@profile
 def screenShareClient(conn):
     rect = {'top': 0, 'left': 0, 'width': 1920, 'height': 1080}
     with mss.mss() as sct:

@@ -53,12 +53,13 @@ class MainWindowController(QObject):
 
     def deleteClientInspector(self, client):
         """
-        Searches for the client inspector window for the given client, pops it from the inspected_clients dictionary, and closes the window.
+        Searches for the client inspector window for the given client, pops it from the inspected_clients dictionary, sets the internal connected event to false, and closes the window.
         Args:
             client: the client instance with the client inspector window that is being deleted.
         """
         if client.uuid in self.inspected_clients:
             window = self.inspected_clients.pop(client.uuid) #remove from inspected clients
+            window.connected.reset()
             window.close() #call InspectionWindowController.close()
 
     def exitEvent(self, event, client):

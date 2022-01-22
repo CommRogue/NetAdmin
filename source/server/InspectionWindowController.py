@@ -49,6 +49,8 @@ class ClientInspectorController(QObject):
         self.tabEventManager = TabThreadEventManager(0, *[threading.Event() for i in range(6)])
         self.view = view
         self.client = client
+        self.connected = threading.Event()
+        self.connected.set()
         self.view.connectionInformationTable.initializeClient(client)
         self.shown = threading.Event()
         self.view.TabContainer.currentChanged.connect(self.tabChanged)

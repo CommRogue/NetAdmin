@@ -22,6 +22,7 @@ class RemoteShellModel(QObject):
                 if response['data']['statusCode'] != NetStatusTypes.NetOK.value:
                     raise Exception("RemoteShellModel: Failed to open shell")
         self.sock.settimeout(0.5)
+        # set timeout to 0.5 seconds, so that the check for status is run every 0.5 seconds, and when the status is false, stop the thread
         while status:
             try:
                 text = self.sock.recv(4016).decode()
