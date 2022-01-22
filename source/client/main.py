@@ -234,7 +234,7 @@ def main():
 
             # identification error
             if message['data'] == NetStatusTypes.NetInvalidIdentification.value:
-                print("Invalid indentification sent. Resetting...")
+                print("Invalid identification sent. Resetting...")
                 #reset the id
                 set_id("")
                 #send a request to identify again

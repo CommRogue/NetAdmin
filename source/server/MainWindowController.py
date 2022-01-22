@@ -59,7 +59,7 @@ class MainWindowController(QObject):
         """
         if client.uuid in self.inspected_clients:
             window = self.inspected_clients.pop(client.uuid) #remove from inspected clients
-            window.connected.reset()
+            window.connected.clear()
             window.close() #call InspectionWindowController.close()
 
     def exitEvent(self, event, client):

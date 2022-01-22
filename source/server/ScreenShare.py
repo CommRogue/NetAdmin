@@ -1,3 +1,4 @@
+import queue
 import threading
 from zlib import decompress
 import pygame
@@ -23,28 +24,18 @@ def recvall(conn, length):
         buf += data
     return buf
 
-def handleEvents(client, conn):
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                conn.close()
-                return
-            if event.type == pygame.KEYDOWN:
-                print(f"Key pressed: {keys[event.key]}")
-                client.send_message(
-                    NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetKeyboardAction, extra=keys[event.key][2:]))
-            if event.type == pygame.MOUSEMOTION:
-                mouse_pos = pygame.mouse.get_pos()
-                client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseMoveAction, extra=mouse_pos))
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                mouse_pos = pygame.mouse.get_pos()
-                client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickDownAction,
-                                               extra=(event.button, mouse_pos[0], mouse_pos[1])))
-            if event.type == pygame.MOUSEBUTTONUP:
-                mouse_pos = pygame.mouse.get_pos()
-                client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickUpAction,
-                                               extra=(event.button, mouse_pos[0], mouse_pos[1])))
+# def handleReceive(queue, conn):
+#     while True:
+#         try:
+#             size = conn.recv(4)
+#             size = int.from_bytes(size, byteorder='big')
+#             pixels = recvall(conn, size)
+#             pixels = jpeg.decode(pixels)
+#             img = pygame.image.frombuffer(pixels, (1920, 1080), 'RGB')
+#             img = pygame.transform.scale(img, (1920, 1080))
+#             queue.put(img)
+#         except:
+#             return
 
 def main(client):
     conn = OpenConnectionHelpers.open_connection(client)
@@ -55,10 +46,36 @@ def main(client):
         if response['data'] == NetStatusTypes.NetOK.value:
             pygame.init()
             window  = pygame.display.set_mode((1920, 1080))
-            event_thread = threading.Thread(target=handleEvents, args=(client, conn))
-            event_thread.start()
-            while True:
-                try:
+            # imgqueue = queue.Queue()
+            # event_thread = threading.Thread(target=handleReceive, args=(imgqueue, conn))
+            # event_thread.start()
+            try:
+                while True:
+                    # # check if queue is empty
+                    # if not imgqueue.empty():
+                    #     window.blit(imgqueue.get_nowait(), (0, 0))
+                    #     pygame.display.flip()
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            conn.close()
+                            return
+                        if event.type == pygame.KEYDOWN:
+                            print(f"Key pressed: {keys[event.key]}")
+                            client.send_message(
+                                NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetKeyboardAction,
+                                           extra=keys[event.key][2:]))
+                        if event.type == pygame.MOUSEMOTION:
+                            mouse_pos = pygame.mouse.get_pos()
+                            client.send_message(
+                                NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseMoveAction, extra=mouse_pos))
+                        if event.type == pygame.MOUSEBUTTONDOWN:
+                            mouse_pos = pygame.mouse.get_pos()
+                            client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickDownAction,
+                                                           extra=(event.button, mouse_pos[0], mouse_pos[1])))
+                        if event.type == pygame.MOUSEBUTTONUP:
+                            mouse_pos = pygame.mouse.get_pos()
+                            client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickUpAction,
+                                                           extra=(event.button, mouse_pos[0], mouse_pos[1])))
                     size = conn.recv(4)
                     size = int.from_bytes(size, byteorder='big')
                     pixels = recvall(conn, size)
@@ -67,9 +84,13 @@ def main(client):
                     img = pygame.transform.scale(img, (1920, 1080))
                     window.blit(img, (0, 0))
                     pygame.display.flip()
-                finally:
+            except:
+                pygame.quit()
+                try:
+                    conn.close()
+                except:
                     pass
-
+                return
 # def main(client):
 #     conn = OpenConnectionHelpers.open_connection(client)
 #     conn.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetRemoteControl)))
