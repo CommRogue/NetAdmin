@@ -1,3 +1,5 @@
+import ast
+import ctypes
 import queue
 import threading
 from zlib import decompress
@@ -44,8 +46,14 @@ def main(client):
     response = orjson.loads(data)
     if response['type'] == NetTypes.NetStatus.value:
         if response['data'] == NetStatusTypes.NetOK.value:
+            remote_resolution = ast.literal_eval(response['extra'])
+            user32 = ctypes.windll.user32
+            local_resolution = (user32.GetSystemMetrics(0), user32.GetSystemMetrics(1))
+            half_local_res = (int(local_resolution[0]/1.5), int(local_resolution[1]/1.5))
+            x_diff_multiplier = (remote_resolution[0]/half_local_res[0])
+            y_diff_multiplier = (remote_resolution[1]/half_local_res[1])
             pygame.init()
-            window  = pygame.display.set_mode((1920, 1080))
+            window  = pygame.display.set_mode(half_local_res)
             # imgqueue = queue.Queue()
             # event_thread = threading.Thread(target=handleReceive, args=(imgqueue, conn))
             # event_thread.start()
@@ -65,7 +73,9 @@ def main(client):
                                 NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetKeyboardAction,
                                            extra=keys[event.key][2:]))
                         if event.type == pygame.MOUSEMOTION:
-                            mouse_pos = pygame.mouse.get_pos()
+                            pg_mouse_pos = pygame.mouse.get_pos()
+                            # multiply by localres -> remoteres multiplier
+                            mouse_pos = (round(pg_mouse_pos[0] * x_diff_multiplier, 1), round(pg_mouse_pos[1] * y_diff_multiplier, 1))
                             client.send_message(
                                 NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseMoveAction, extra=mouse_pos))
                         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -80,8 +90,8 @@ def main(client):
                     size = int.from_bytes(size, byteorder='big')
                     pixels = recvall(conn, size)
                     pixels = jpeg.decode(pixels)
-                    img = pygame.image.frombuffer(pixels, (1920, 1080), 'RGB')
-                    img = pygame.transform.scale(img, (1920, 1080))
+                    img = pygame.image.frombuffer(pixels, remote_resolution, 'RGB')
+                    img = pygame.transform.scale(img, half_local_res)
                     window.blit(img, (0, 0))
                     pygame.display.flip()
             except:

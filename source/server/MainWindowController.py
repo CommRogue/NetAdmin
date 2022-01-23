@@ -137,31 +137,30 @@ class MainWindowController(QObject):
             client: the client that a connection was started for.
         """
         self.logger.info(f"Connection event received - {client.address}")
-        if client not in self.clientEntries:
-            client.dataLock.acquire_read()
+        # if client not in self.clientEntries:
+        client.dataLock.acquire_read()
 
-            #find the index of the client in the table if there is one
-            found = False
-            for uuid, UIEntry in list(self.clientEntries.items()):
-                if uuid == UIEntry._uuid_field.text():
-                    found = True
-                    break
+        #find the index of the client in the table if there is one
+        # for uuid, UIEntry in list(self.clientEntries.items()):
+        #     if client.uuid == UIEntry._uuid_field.text():
+        #         found = True
+        #         break
 
-            # if client isn't in table, add it
-            if not found:
-                self.clientEntries[client.uuid] = UIClientEntry(client, "Connecting...", client.geoInformation.REAL_IP, client.uuid, client.geoInformation.CITY + ", " + client.geoInformation.COUNTRY)
-                self.clientEntries[client.uuid].addToTable(self.view.ClientTable)
+        # if client isn't in table, add it
+        if not client.uuid in self.clientEntries:
+            self.clientEntries[client.uuid] = UIClientEntry(client, "Connecting...", client.geoInformation.REAL_IP, client.uuid, client.geoInformation.CITY + ", " + client.geoInformation.COUNTRY)
+            self.clientEntries[client.uuid].addToTable(self.view.ClientTable)
 
-            # if client is already in table (restored from database or just disconnected before), then add it, and and set the UIEntry's client field to the client instance.
-            else:
-                self.clientEntries[client.uuid].setStatus("Connecting...")
-                self.clientEntries[client.uuid].setAddress(client.geoInformation.REAL_IP)
-                self.clientEntries[client.uuid].setCountry(client.geoInformation.CITY + ", " + client.geoInformation.COUNTRY)
-                self.clientEntries[client.uuid].client = client #set the UIEntry's client to the client object
+        # if client is already in table (restored from database or just disconnected before), then add it, and and set the UIEntry's client field to the client instance.
+        else:
+            self.clientEntries[client.uuid].setStatus("Connecting...")
+            self.clientEntries[client.uuid].setAddress(client.geoInformation.REAL_IP)
+            self.clientEntries[client.uuid].setCountry(client.geoInformation.CITY + ", " + client.geoInformation.COUNTRY)
+            self.clientEntries[client.uuid].client = client #set the UIEntry's client to the client object
 
-            client.dataLock.release_read()
-            # send request for system information
-            client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetSystemInformation))
+        client.dataLock.release_read()
+        # send request for system information
+        client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetSystemInformation))
 
     def on_Connection_end(self, client):
         """
