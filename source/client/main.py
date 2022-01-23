@@ -1,3 +1,4 @@
+import ctypes
 import threading
 import socket
 import os
@@ -164,7 +165,9 @@ def handleOpenConnection(server):
             elif message['data'] == NetTypes.NetRemoteControl.value:
                 print(f"Remote control request from {address}")
                 # send response to client
-                client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatusTypes.NetOK, id=id)))
+                user32 = ctypes.windll.user32
+                local_resolution = str((user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)))
+                client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatusTypes.NetOK, extra=local_resolution, id=id)))
                 # open screenshare
                 screenShareClient(client)
 
@@ -214,7 +217,7 @@ def ActualDirectorySize(path, f):
 def main():
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("192.168.1.205", 49152))
+    s.connect(("127.0.0.1", 49152))
 
     computer = wmi.WMI()
 
