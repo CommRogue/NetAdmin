@@ -1,3 +1,4 @@
+import ast
 import ctypes
 import os
 import time
@@ -63,8 +64,9 @@ def try_connection(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (ConnectionAbortedError, ConnectionResetError, OSError):
-            print(f"THREAD {threading.current_thread().name} [FUNC {func.__name__}]: Connection disconnected by server without message.")
+        except (ConnectionAbortedError, ConnectionResetError, OSError) as e:
+            print(f"THREAD {threading.current_thread().name} [FUNC {func.__name__}]: Connection disconnected by server without message:")
+            print(e)
     return wrapper
 
 @try_connection
@@ -79,9 +81,16 @@ def receive(sock, proc):
 
 @try_connection
 #@profile
-def screenShareClient(conn):
-    rect = {'top': 0, 'left': 0, 'width': 1920, 'height': 1080}
+def screenShareClient(conn, response_id):
     with mss.mss() as sct:
+        monitor = sct.monitors[0]
+        # send response to client
+        # user32 = ctypes.windll.user32
+        # local_resolution = str((user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)))
+        local_resolution = (monitor['width'], monitor['height'])
+        conn.send(NetProtocol.packNetMessage(
+            NetMessage(type=NetTypes.NetStatus, data=NetStatusTypes.NetOK, extra=str(local_resolution), id=response_id)))
+
         # The region to capture
         i = 0
         start = time.time()
@@ -91,7 +100,7 @@ def screenShareClient(conn):
                 i = 0
                 start = time.time()
             i += 1
-            image = numpy.array(sct.grab(rect))
+            image = numpy.array(sct.grab(monitor))
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
             image = jpeg.encode(image, quality=75)
             # buffer = io.BytesIO()
@@ -158,12 +167,8 @@ def handleOpenConnection(server):
 
             elif message['data'] == NetTypes.NetRemoteControl.value:
                 print(f"Remote control request from {address}")
-                # send response to client
-                user32 = ctypes.windll.user32
-                local_resolution = str((user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)))
-                client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatusTypes.NetOK, extra=local_resolution, id=id)))
                 # open screenshare
-                screenShareClient(client)
+                screenShareClient(client, id)
 
             # if the request is to open a shell connection
             elif message['data'] == NetTypes.NetOpenShell.value:

@@ -1,5 +1,6 @@
 import ast
 import ctypes
+import logging
 import queue
 import threading
 from zlib import decompress
@@ -26,45 +27,61 @@ def recvall(conn, length):
         buf += data
     return buf
 
-# def handleReceive(queue, conn):
-#     while True:
-#         try:
-#             size = conn.recv(4)
-#             size = int.from_bytes(size, byteorder='big')
-#             pixels = recvall(conn, size)
-#             pixels = jpeg.decode(pixels)
-#             img = pygame.image.frombuffer(pixels, (1920, 1080), 'RGB')
-#             img = pygame.transform.scale(img, (1920, 1080))
-#             queue.put(img)
-#         except:
-#             return
+def handleReceive(queue, conn, remote_resolution, pygame_resolution):
+    i = 0
+    cSumData = 0
+    while True:
+        try:
+            if i == 60:
+                logging.info(f"[SCREENSHARE] 60 FPS in {cSumData/1000000}MB")
+                cSumData = 0
+                i = 0
+            size = conn.recv(4)
+            size = int.from_bytes(size, byteorder='big')
+            cSumData += size
+            pixels = recvall(conn, size)
+            pixels = jpeg.decode(pixels)
+            img = pygame.image.frombuffer(pixels, remote_resolution, 'RGB')
+            img = pygame.transform.smoothscale(img, pygame_resolution)
+            queue.put(img)
+            i += 1
+        except:
+            return
 
 def main(client):
+    # request open connection
     conn = OpenConnectionHelpers.open_connection(client)
+    # send pygame_resolution to tell client capture size
     conn.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetRemoteControl)))
+    # load response
     size, data = NetProtocol.unpackFromSocket(conn)
     response = orjson.loads(data)
+
     if response['type'] == NetTypes.NetStatus.value:
         if response['data'] == NetStatusTypes.NetOK.value:
-            remote_resolution = ast.literal_eval(response['extra'])
+            # calculate local resolution
             user32 = ctypes.windll.user32
             local_resolution = (user32.GetSystemMetrics(0), user32.GetSystemMetrics(1))
-            half_local_res = (int(local_resolution[0]/1.5), int(local_resolution[1]/1.5))
-            x_diff_multiplier = (remote_resolution[0]/half_local_res[0])
-            y_diff_multiplier = (remote_resolution[1]/half_local_res[1])
+            remote_resolution = ast.literal_eval(response['extra'])
+            pygame_resolution = (min(local_resolution[0]/1.1, remote_resolution[0]), min(local_resolution[1]/1.1, remote_resolution[1]))
+            x_diff_multiplier = (remote_resolution[0]/pygame_resolution[0])
+            y_diff_multiplier = (remote_resolution[1]/pygame_resolution[1])
             pygame.init()
-            window  = pygame.display.set_mode(half_local_res)
-            # imgqueue = queue.Queue()
-            # event_thread = threading.Thread(target=handleReceive, args=(imgqueue, conn))
-            # event_thread.start()
+            window = pygame.display.set_mode(pygame_resolution)
+            imgqueue = queue.Queue()
+            event_thread = threading.Thread(target=handleReceive, args=(imgqueue, conn, remote_resolution, pygame_resolution,))
+            event_thread.start()
+            clock = pygame.time.Clock()
             try:
                 while True:
-                    # # check if queue is empty
-                    # if not imgqueue.empty():
-                    #     window.blit(imgqueue.get_nowait(), (0, 0))
-                    #     pygame.display.flip()
+                    # check if queue is empty
+                    if not imgqueue.empty():
+                        window.blit(imgqueue.get_nowait(), (0, 0))
+                        pygame.display.flip()
+                    # handle input
                     for event in pygame.event.get():
                         if event.type == pygame.QUIT:
+                            pygame.quit()
                             conn.close()
                             return
                         if event.type == pygame.KEYDOWN:
@@ -86,15 +103,17 @@ def main(client):
                             mouse_pos = pygame.mouse.get_pos()
                             client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickUpAction,
                                                            extra=(event.button, mouse_pos[0], mouse_pos[1])))
-                    size = conn.recv(4)
-                    size = int.from_bytes(size, byteorder='big')
-                    pixels = recvall(conn, size)
-                    pixels = jpeg.decode(pixels)
-                    img = pygame.image.frombuffer(pixels, remote_resolution, 'RGB')
-                    img = pygame.transform.scale(img, half_local_res)
-                    window.blit(img, (0, 0))
-                    pygame.display.flip()
-            except:
+                    clock.tick(60)
+                    # size = conn.recv(4)
+                    # size = int.from_bytes(size, byteorder='big')
+                    # pixels = recvall(conn, size)
+                    # pixels = jpeg.decode(pixels)
+                    # img = pygame.image.frombuffer(pixels, remote_resolution, 'RGB')
+                    # img = pygame.transform.scale(img, pygame_resolution)
+                    # window.blit(img, (0, 0))
+                    # pygame.display.flip()
+            except Exception as e:
+                print(e)
                 pygame.quit()
                 try:
                     conn.close()
