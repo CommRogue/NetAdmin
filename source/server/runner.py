@@ -1,3 +1,6 @@
+import threading
+import time
+
 from MainWindowView import MainWindow
 from MainWindowController import MainWindowController
 from MainWindowModel import MainWindowModel
@@ -64,8 +67,17 @@ def instantiateDb(path):
 def except_hook(cls, exception, traceback):
     sys.__excepthook__(cls, exception, traceback)
 
+def threadCount():
+    # print number of threads running in a loop
+    while True:
+        print(threading.active_count())
+        time.sleep(1)
+
 def main():
     import sys
+    # create thread on threadCount
+    threading.Thread(target=threadCount).start()
+
     sys.excepthook = except_hook
     app = QApplication(sys.argv)
     databaseClients, config = setupAppData()

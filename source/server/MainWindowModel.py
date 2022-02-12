@@ -367,6 +367,13 @@ class MessageHandler(QRunnable):
             dataStructure = NetDirectorySize(**data)
             eventAttachedData = dataStructure
 
+        # if related to response to text request
+        elif self.message["type"] == NetTypes.NetText.value:
+            # load the directory size datastructure from the message, update the local client instance, and emit sDirectorySize_update
+            data = self.message["data"]
+            dataStructure = NetText(**data)
+            eventAttachedData = dataStructure
+
         # if related to response to metrics
         elif self.message["type"] == NetTypes.NetSystemMetrics.value: #ADD CHECKS FOR VALID METRICS
             # load the system metrics datastructure from the message, update the local client instance, and emit sSystemMetrics_update

