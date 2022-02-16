@@ -46,7 +46,7 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
         self.totalSizeStr = InspectionWindowView.bytesToStr(self.totalSize)
         self.view.fileSizeText.setText(self.totalSizeStr)
         self.view.downloadTimeText.setText(f"{round(self.totalSize / 2500000, 2)}s")
-        self.view.exec_()
+        self.view.show()
         yield
 
     def exec_(self):

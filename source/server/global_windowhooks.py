@@ -27,11 +27,11 @@ def win_close():
     - Close screen sharing.
     """
     MWindowModel.LISTENER_RUNNING = False
-    for client in MWindowModel.clients.values():
-        client.close()
     for controller in CONTROLLER.inspected_clients.values():
         controller.fileExplorerManager.stop_downloads()
         controller.close()
+    for client in MWindowModel.clients.values():
+        client.close()
     global RUNNING
     RUNNING = False
     print("----------------- APPLICATION CLOSE EVENT FINISHED -----------------")
