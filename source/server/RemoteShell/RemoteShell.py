@@ -27,7 +27,20 @@ class RemoteShellManager(GUIHelpers.TabManager):
 
     def tab_closed(self):pass
 
+    def stop_all(self):
+        """
+        Stops all shells. Does not remove their tab from the UI.
+        """
+        for shell in self.remote_shell_list:
+            shell.stop()
+        self.remote_shell_list = []
+
     def tabCloseRequested(self, index):
+        """
+        Responds to the shell tab close signal.
+        Args:
+            index: index of the shell to be closed.
+        """
         self.remote_shell_list[index].stop()
         self.remote_shell_list.pop(index)
         self.inspector_controller.view.ShellTabContainer.removeTab(index)

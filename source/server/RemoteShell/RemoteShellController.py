@@ -26,7 +26,9 @@ class RemoteShellController(QObject, GUIHelpers.MVCModel):
     def set_view(self, view):
         GUIHelpers.MVCModel.set_view(self, view)
         self.view.shellInput.returnPressed.connect(self.get_command)
-        self.updateTextSignal.connect(self.view.add_text)
+        def lmbd(text):
+            self.view.add_text(text)
+        self.updateTextSignal.connect(lmbd)
 
     def set_model(self, model):
         GUIHelpers.MVCModel.set_model(self, model)

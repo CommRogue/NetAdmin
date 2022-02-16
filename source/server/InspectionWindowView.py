@@ -95,6 +95,7 @@ class ClientInspectorView(QMainWindow):
 
     def closeEvent(self, event):
         self.exitEvent.emit(event)
+        event.accept()
 
     def addToTable(self):
         self.SystemInformationTable.insertRow(0)

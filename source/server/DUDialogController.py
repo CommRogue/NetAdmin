@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 
@@ -16,7 +17,7 @@ import fileExplorerManager
 #     def __init__(self, parent=None):
 
 class DUDialogController(QObject, GUIHelpers.MVCModel):
-    du_progress_signal = pyqtSignal(int)
+    du_progress_signal = pyqtSignal(object)
     infobox_signal = pyqtSignal(str, str)
     exec_signal = pyqtSignal()
     currentLoadingView = None
@@ -143,6 +144,10 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
             self.bytes_downloaded += bytes_read
             self.view.update_progress_bar(min(round(self.bytes_downloaded/self.totalSize, 2)*100, 100))
 
+    def stop(self):
+        self.closeButtonClicked()
+        logging.info("STOPPING DOWNLOAD of %s", self.itemsString)
+
     def closeButtonClicked(self):
         self.model.cancel_download()
         self.view.close()
@@ -160,7 +165,7 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
             remotedirs = self.fileExplorerItems
             remotedirs = map(lambda x: x.path, remotedirs)
 
-            download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal, self.infobox_signal))
+            download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal, self.infobox_signal, self.totalSize))
             download_thread.start()
         else:
             GUIHelpers.infobox("Download in progress", "The download is already in progress.")

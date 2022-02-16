@@ -28,7 +28,8 @@ class RemoteShellModel(QObject):
                 text = self.sock.recv(4016).decode()
                 text_signal.emit(text)
             except socket.timeout:
-                pass
+                if not status:
+                    break
             except Exception as e:
                 print(f"ERROR {str(e)}")
                 break

@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
 from PyQt5.QtGui import QIcon, QPixmap
-from MainWindowModel import Client
+from MWindowModel import Client
 import resources.qrc_resources
 
 class InformationDisplayTable(QTableWidget):

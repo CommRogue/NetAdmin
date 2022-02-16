@@ -42,7 +42,9 @@ response_events = {}
 
 clients = {}
 
-logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(levelname)s:' + bcolors.OKGREEN + '    %(message)s' + bcolors.END, level=logging.INFO)
+temp_identifiers = {}
+
+logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(levelname)s:' + bcolors.OKGREEN + '    %(message)s' + bcolors.END, level=logging.DEBUG)
 
 def threadpool_job_tracker(attr_str):
     def decorator(func):
@@ -198,8 +200,8 @@ class Client(QObject):
         """
         closes the client and emits a connection_end signal.
         """
-        self.connection_end.emit()
-        self.socket.close() #check for problems
+        self.sConnection_end.emit()
+        self._socket.close() #check for problems
 
     def send_message(self, data : NetMessage, track_event=False):
         if track_event: #if wants to track the response, then add an id to the message and add it to the response_events dict and return the event
@@ -319,16 +321,26 @@ class MessageHandler(QRunnable):
 
             #if existing client sent identification
             if self.message['data']["id"] != "":
-                # check if id is found in database
-                found = DatabaseHelpers.find_client(con, self.message['data']["id"])
+                # check if found in temporary ids
+                f = temp_identifiers.get(self.message['data']["id"])
+                # if we found the identifier, and the corresponding client is the client that send the identification
+                if f == self.client:
+                    # add client to database
+                    logging.info(f"Client {self.client.address} FOUND in temporary ids. Adding...")
+                    DatabaseHelpers.insert_client(con, self.message['data']['id'], self.client.address[0])
+                    found = True
 
-                # if id not found, log and send error to the client
-                if found is None:
-                    logging.debug(f"Client {self.client.address[0]} sent INVALID identification {self.message['data']['id']}")
-                    self.client.send_message(NetMessage(NetTypes.NetStatus, NetStatusTypes.NetInvalidIdentification))
+                else: # if identifier not in temporary
+                    # check if id is found in database
+                    found = DatabaseHelpers.find_client(con, self.message['data']["id"])
+
+                    # if id not found in temp and database, log and send error to the client
+                    if found is None:
+                        logging.debug(f"Client {self.client.address[0]} sent INVALID identification {self.message['data']['id']}")
+                        self.client.send_message(NetMessage(NetTypes.NetStatus, NetStatusTypes.NetInvalidIdentification))
 
                 #if identification is found and valid then log, set the local client instance's uid, and notify identificationNotification
-                else:
+                if found is not None:
                     logging.debug(f"Client {self.client.address[0]} sent valid identification {self.message['data']['id']}")
                     self.client.uuid = self.message['data']["id"]
                     logging.debug(f"Client {self.client.address} identified as {self.client.uuid}")
@@ -345,7 +357,7 @@ class MessageHandler(QRunnable):
 
                 #send the new id to the client, add it to the database, and request the client to authunticate again
                 self.client.send_message(NetMessage(NetTypes.NetIdentification, NetIdentification(cid))) #send a client id
-                DatabaseHelpers.insert_client(con, cid, self.client.address[0])
+                temp_identifiers[cid] = self.client
                 self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification)) #request to identify again
 
         # if related to response to system information
@@ -457,6 +469,7 @@ class ClientConnectionHandler(QRunnable):
         self.client.dataLock.release_write()
         self.client.sConnection_start.emit() #emit signal to update UI
 
+LISTENER_RUNNING = True
 
 class ListenerWorker(QObject):
     '''
@@ -492,7 +505,7 @@ class ListenerWorker(QObject):
         self.listener_socket.bind((socket.gethostbyname("0.0.0.0"), 49152))
         self.listener_socket.listen(5)
 
-        while True:
+        while LISTENER_RUNNING:
             readable, writable, exceptional = select.select([self.listener_socket] + self.sockets, self.sockets, [])
 
             #if socket can be read, either a new connection or a new message from a client

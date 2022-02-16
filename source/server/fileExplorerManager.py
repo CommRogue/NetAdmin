@@ -123,6 +123,11 @@ class FileExplorerManager(QObject):
         self.view.fileViewer.customContextMenuRequested.connect(self.customContextMenuRequested)
         self.selections = None
         self.client = client
+        self.DUDialogControllers = []
+
+    def stop_downloads(self):
+        for controller in self.DUDialogControllers:
+            controller.stop()
 
     def infoBox(self, title, body):
         GUIHelpers.infobox(title, body)
@@ -264,6 +269,8 @@ class FileExplorerManager(QObject):
                 # connect the view and the model to the controller
                 DUController.set_view(DUView)
                 DUController.set_model(DUModel)
+
+                self.DUDialogControllers.append(DUController)
 
                 DUController.exec_()
             else:  # if some selections are not downloadable, show an error message

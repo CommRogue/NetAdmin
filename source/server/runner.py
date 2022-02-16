@@ -1,9 +1,11 @@
+import functools
 import threading
 import time
-
+import MWindowModel
+import global_windowhooks
 from MainWindowView import MainWindow
 from MainWindowController import MainWindowController
-from MainWindowModel import MainWindowModel
+from MWindowModel import MainWindowModel
 from PyQt5.QtWidgets import *
 import qtmodern.styles
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery
@@ -11,6 +13,8 @@ import qtmodern.windows
 import os
 import sys
 import pypika
+
+RUNNING = True
 
 def setupAppData():
     """
@@ -67,16 +71,10 @@ def instantiateDb(path):
 def except_hook(cls, exception, traceback):
     sys.__excepthook__(cls, exception, traceback)
 
-def threadCount():
-    # print number of threads running in a loop
-    while True:
-        print(threading.active_count())
-        time.sleep(1)
 
 def main():
     import sys
     # create thread on threadCount
-    threading.Thread(target=threadCount).start()
 
     sys.excepthook = except_hook
     app = QApplication(sys.argv)
@@ -88,6 +86,8 @@ def main():
 
     controller = MainWindowController(window, databaseClients)
     model = MainWindowModel(controller)
+    global_windowhooks.init(model, controller)
+
     mw.show()
 
     try:

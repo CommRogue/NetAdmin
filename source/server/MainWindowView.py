@@ -3,6 +3,8 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 
+import global_windowhooks
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -50,6 +52,10 @@ class MainWindow(QMainWindow):
         # self.ClientTable.setItem(c-1, 1, QTableWidgetItem("text2"))
         # self.ClientTable.setItem(c-1, 2, QTableWidgetItem("text3"))
         self.init_menu()
+
+    def closeEvent(self, event):
+        global_windowhooks.win_close()
+        event.accept()
 
     def init_menu(self):
         self._menuBar = QMenuBar(self)

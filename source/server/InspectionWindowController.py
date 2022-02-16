@@ -1,3 +1,5 @@
+import pygame
+
 import InspectionWindowView
 import ScreenShare
 from KeyLog.Keylogger import KeyloggerManager
@@ -123,14 +125,27 @@ class ClientInspectorController(QObject):
         worker.start()
 
     def close(self):
+        """
+        Hides the client inspector window.
+        Note that this function does not stop threads, windows, or any tasks associated with the inspector,  with the exception of the remote shell threads, which are closed.
+        """
         try:
-            self.view.close()
+            self.view.hide()
         except:pass
         self.infoLock.acquire_write()
         self.active = False
         self.currentTab = -1
         self.infoLock.release_write()
+        self.remoteShellManager.stop_all()
         self.semaphoreSubscriptor.increment_all()
+
+    def force_stop(self):
+        """
+        Calls InspectorController.close() and stops all threads and tasks associated with the inspector.
+        """
+        self.close()
+        self.fileExplorerManager.stop_downloads()
+        pygame.quit()
 
     def show(self):
         try:

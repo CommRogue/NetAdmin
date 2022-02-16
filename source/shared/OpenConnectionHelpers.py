@@ -1,7 +1,7 @@
 import socket
 import os, sys
 sys.path.insert(1, os.path.join(sys.path[0], '../server'))
-import MainWindowModel
+import MWindowModel
 from NetProtocol import *
 import os
 from PyQt5.QtCore import pyqtSignal
@@ -90,7 +90,7 @@ def resolveRemoteDirectoryToLocal(base_remote_directory, actual_remote_directory
     # combine the relative path with the local directory that the user chose
     return  os.path.join(local_directory, relative_path)
 
-def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_progress_signal=None) -> tuple[
+def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_progress_signal=None, overall_size=None) -> tuple[
     bool, int, list[str]]:
     """
     Receives files from the specified socket from a single remote directory or file while reporting progress to the download_progress_signal.
@@ -114,6 +114,8 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
     size, message = NetProtocol.unpackFromSocket(socket)
     response = orjson.loads(message)  # convert the message to dictionary from json
     # while we are not getting a file download finished code, continue reading files
+    bytes_to_signal = overall_size / 100
+    tbs = bytes_to_signal
     while response['data'].get("statusCode") != NetStatusTypes.NetDownloadFinished.value and status_queue.empty():
         if response['type'] == NetTypes.NetStatus.value:
             if response['data'].get("statusCode") == NetStatusTypes.NetDirectoryAccessDenied.value:
@@ -131,10 +133,7 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
             # verify if the directory that the file exists in exists
             if not verify_dir(os.path.dirname(path)):
                 logging.info(f"Directory {path} didn't exist. Created it.")
-
             bytes_received = 0
-            bytes_to_signal = file_size/100
-            tbs = bytes_to_signal
             # open file by combining the local download directory (+directory offset) and the file name
             with open(path, 'wb+') as f:
                 # read file data in chunks of 1024 bytes
@@ -149,12 +148,16 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
                     tbs -= len(data)
                     # report progress
                     if download_progress_signal and tbs < 0:
-                        download_progress_signal.emit(bytes_to_signal-tbs)
+                        # calculate the difference between the temporary bytes read and the bytes to signal
+                        t = bytes_to_signal-tbs
+                        download_progress_signal.emit(t)
+                        # remove the rmainder of temporary bytes read from the bytes to signal
                         tbs = bytes_to_signal
 
                     #if we received all the bytes, then finished file download
                     if bytes_received == file_size:
-                        download_progress_signal.emit(bytes_to_signal-tbs)
+                        logging.info("Finished downloading file.")
+                        # download_progress_signal.emit(bytes_to_signal-tbs)
                         break
                 if not status_queue.empty():
                     # if the status queue is not empty, then the user has requested to cancel the download
@@ -181,7 +184,7 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
         return True, excludedCount, pathlist
 
 
-def open_connection(client : typing.Union[MainWindowModel.Client, socket.socket]):
+def open_connection(client : typing.Union[MWindowModel.Client, socket.socket]):
     """
     Opens a new socket to the client or socket passed in.
     Args:
@@ -190,7 +193,7 @@ def open_connection(client : typing.Union[MainWindowModel.Client, socket.socket]
     Returns: socket of the new connection.
     """
     # if passed in MainWindowModel.Client
-    if isinstance(client, MainWindowModel.Client):
+    if isinstance(client, MWindowModel.Client):
         # send open connection request
         event = client.send_message(NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value), track_event=True)
         # wait for response and get data from it

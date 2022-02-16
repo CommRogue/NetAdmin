@@ -1,5 +1,7 @@
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QRunnable, QThreadPool, pyqtSlot
-from MainWindowModel import Client
+
+import MWindowModel
+from MWindowModel import Client
 from NetProtocol import *
 import logging
 from UIClientEntry import UIClientEntry

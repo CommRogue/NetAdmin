@@ -27,7 +27,7 @@ class DUDialogModel(QObject):
         if self.status_queue is not None:
             self.status_queue.put("cancel")
 
-    def download_files(self, localdir, remotedirs, download_progress_signal : pyqtSignal, infobox_signal : pyqtSignal):
+    def download_files(self, localdir, remotedirs, download_progress_signal : pyqtSignal, infobox_signal : pyqtSignal, totalSize):
         """
         Download a file from the client to an existing local directory.
         Implementation summary:
@@ -54,7 +54,7 @@ class DUDialogModel(QObject):
             socket.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetRequest, NetTypes.NetDownloadFile, extra=remotedir)))
             # wait for response
             self.status_queue = queue.Queue()
-            received_all, excluded, pathlist = receivefiles(socket, remotedir, localdir, self.status_queue, download_progress_signal)
+            received_all, excluded, pathlist = receivefiles(socket, remotedir, localdir, self.status_queue, download_progress_signal, overall_size=totalSize)
             # # delete all files from pathlist if download was cancelled
             excludedCount += excluded
             if not received_all:
