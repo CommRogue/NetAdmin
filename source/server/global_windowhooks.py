@@ -17,6 +17,7 @@ def threadCount():
     # print number of threads running in a loop
     while RUNNING:
         logging.debug("Active Threads: " + str(threading.active_count()))
+        logging.debug("Threads: " + str(list(map(lambda x: x.name, threading.enumerate()))))
         time.sleep(1)
 
 def win_close():

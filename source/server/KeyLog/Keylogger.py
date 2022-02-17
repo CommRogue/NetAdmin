@@ -19,7 +19,7 @@ class KeyloggerManager(QObject):
         self.inspector_controller.view.keyloggerRefreshButton.clicked.connect(functools.partial(self.refresh, self.time_possibilies[0], "keylogger"))
         self.inspector_controller.view.clipboardRefreshButton.clicked.connect(functools.partial(self.refresh, self.time_possibilies[0], "clipboard"))
         self.inspector_controller.view.keyloggerClearButton.clicked.connect(lambda: self.inspector_controller.view.keyloggerTextEdit.clear())
-        self.inspector_controller.view.clipboardClearButton.clicked.connect(lambda: self.inspector_controller.view.clipboardClearButton.clear())
+        self.inspector_controller.view.clipboardClearButton.clicked.connect(lambda: self.inspector_controller.view.clipboardTextEdit.clear())
         self.inspector_controller.view.clipboardCopyButton.clicked.connect(lambda: pyperclip.copy(self.inspector_controller.view.clipboardTextEdit.toPlainText()))
         self.inspector_controller.view.keyloggerCopyButton.clicked.connect(lambda: pyperclip.copy(self.inspector_controller.view.keyloggerTextEdit.toPlainText()))
 

