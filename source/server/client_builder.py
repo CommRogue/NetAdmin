@@ -3,7 +3,7 @@ import os, sys
 
 def build():
     PyInstaller.__main__.run([
-        '..\\client\\service_starter.py',
+        '..\\client\\main.py',
         '--onefile',
         '--runtime-tmpdir=.',
         '--add-binary=lib_bin\\turbojpeg-bin\\turbojpeg.dll;.',
