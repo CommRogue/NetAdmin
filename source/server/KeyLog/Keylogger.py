@@ -50,6 +50,7 @@ class KeyloggerManager(QObject):
         if not self.initialized:
             self.initialized = True
             self.refresh(self.time_possibilies[0], "keylogger")
+            self.refresh(self.time_possibilies[0], "clipboard")
 
     def tab_closed(self):
         pass

