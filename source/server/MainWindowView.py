@@ -2,7 +2,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
-
+from CreatorDialog import CreatorDialog
 import global_windowhooks
 
 
@@ -64,8 +64,18 @@ class MainWindow(QMainWindow):
         subMenu = self._menuBar.addMenu("Options")
 
         subMenu = self._menuBar.addMenu("Generate")
-        subMenu.addAction("Generate Client Payload...")
+        self.clientCreatorMenuAction = subMenu.addAction("Generate Client Payload...")
+        self.clientCreatorMenuAction.triggered.connect(self.clientCreatorMenuAction_clicked)
         self.setMenuBar(self._menuBar)
+
+    def clientCreatorMenuAction_clicked(self):
+        if not CreatorDialog.currentDialog:
+            creator = CreatorDialog(self)
+            creator.setAttribute(Qt.WA_DeleteOnClose)
+            creator.show()
+        else:
+            CreatorDialog.currentDialog.activateWindow()
+
 
     # def setClientEntry(self, item, status, address, name="N/A", latency="N/A"):
     #     row = item.row()

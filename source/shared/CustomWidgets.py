@@ -1,7 +1,31 @@
-from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QWidget, QRadioButton
 from PyQt5.QtGui import QIcon, QPixmap
 from MWindowModel import Client
 import resources.qrc_resources
+
+class WidgetGroupParent(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+    # TODO - make style nicer by making the first level after widget visible and grayed out while second level and next not visible
+    def initialize(self):
+        firstElement, elements = self.getTopAndChildrenWidgets()
+        for element in elements:
+            element.setEnabled(False)
+        if not isinstance(firstElement, QRadioButton):
+            raise Exception("WidgetGroupParent must have a QRadioButton as first child")
+        firstElement.toggled.connect(lambda state: self.setChildState(state))
+
+    def getTopAndChildrenWidgets(self):
+        children = self.children()
+        # starting at 1 to get rid of layout
+        return children[1], children[2:]
+
+    def setChildState(self, state):
+        _, children = self.getTopAndChildrenWidgets()
+        for child in children:
+            child.setEnabled(state)
+
 
 class InformationDisplayTable(QTableWidget):
     def __init__(self, parent=None):
