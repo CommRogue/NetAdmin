@@ -1,3 +1,4 @@
+import configparser
 import logging
 import os
 import sys
@@ -10,6 +11,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 import client_builder
 from CustomWidgets import WidgetGroupParent
 import logging
+
+PORT = 49152
 
 class StdOutputQueueRedirector(Queue):
     def __init__(self, *args, **kwargs):
@@ -261,16 +264,38 @@ class CreatorDialog(QDialog):
         self.buildInstallerButton.clicked.connect(self.onBuildInstallerButtonClicked)
 
     def onBuildInstallerButtonClicked(self):
+        import ctypes.wintypes
+        CSIDL_PERSONAL = 5  # My Documents
+        SHGFP_TYPE_CURRENT = 0  # Get current, not default value
+
+        outputDir = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+        ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, outputDir)
+
         # if manual installation
-        q = multiprocessing.Queue()
+        q = Queue()
+        outputRedirector = LoggingHandlerRedirector(q)
         if self.manualButton.toggled:
-            q = Queue()
-            outputRedirector = LoggingHandlerRedirector(q)
             logging.getLogger().addHandler(outputRedirector)
-            t = threading.Thread(target=self.buildd, args=(outputRedirector, "manual",))
-            t.start()
+            t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "manual",))
         else:
-            pass
+            if self.localNetworkButton.toggled:
+                if self.privateIpButton.toggled:
+                    ip = self.privateIpLineEdit.text()
+                    t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "ip", ip))
+                else:
+                    # TODO - implement choose network adapter
+                    pass
+            else:
+                if self.dnsButton.toggled:
+                    hostname = self.dnsLineEdit.text()
+                    t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "hostname", hostname))
+                else:
+                    ip = self.publicIpLineEdit.text()
+                    t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "ip", ip))
+
+        # create temporary runconfig in documents folder
+
+        t.start()
         while True:
             try:
                 item = q.get(timeout=0.05)
@@ -284,18 +309,29 @@ class CreatorDialog(QDialog):
                 QApplication.instance().processEvents()
 
     # TODO - make port in config file for server application, add port automatically in this function
-    def buildd(self, outputRedirector, type, ip=None, port=None):
+    def build(self, outputDir, outputRedirector, type, ip_or_hostname=None, port=PORT):
         options = [
-        '..\\client\\main.py',
-        '--onefile',
-        '--runtime-tmpdir=.',
-        '--add-binary=lib_bin\\turbojpeg-bin\\turbojpeg.dll;.',
-        '--hidden-import=win32com.client',
-        '--hidden-import=win32api',
-        '--hidden-import=win32con',
-        '--hidden-import=win32timezone',
-        f"--paths={os.path.join(sys.path[0], '../shared')}",
+            '..\\client\\main.py',
+            '--onefile',
+            '--runtime-tmpdir=.',
+            '--add-binary=lib_bin\\turbojpeg-bin\\turbojpeg.dll;.',
+            '--hidden-import=win32com.client',
+            '--hidden-import=win32api',
+            '--hidden-import=win32con',
+            '--hidden-import=win32timezone',
+            f"--paths={os.path.join(sys.path[0], '../shared')}",
         ]
+
+        config = None
+        if type != "manual":
+            config = configparser.ConfigParser()
+            config["CONNECTION"]['type'] = type
+            config["CONNECTION"]['ip_or_hostnae'] = ip_or_hostname
+            config["CONNECTION"]['port'] = str(port)
+            configdir = os.path.join(outputDir, "temp")
+            with open(configdir) as configfile:
+                config.write(configfile)
+                options.append(f"--add-data={configdir};.")
 
         if type == "ip":
             pass
