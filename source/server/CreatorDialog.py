@@ -1,21 +1,17 @@
 import configparser
-import logging
 import os
 import pathlib
 import subprocess
 import sys
 import threading
-from multiprocessing import Process
-import multiprocessing.queues
 from queue import Queue
-
+import psutil
 from PyQt5.QtCore import QRegExp
 from PyQt5.QtWidgets import QDialog, QApplication
 from PyQt5 import QtCore, QtGui, QtWidgets
-
 import GUIHelpers
 import client_builder
-from CustomWidgets import WidgetGroupParent
+from CustomWidgets import WidgetGroupParent, UPnPVerify
 import logging
 
 PORT = 49152
@@ -36,8 +32,8 @@ class LoggingHandlerRedirector(logging.Handler):
         self.queue = queue
 
     def emit(self, message):
-        print('logging handler got', message)
         if 'pyinstaller' in message.name.lower():
+            print('logging handler got', message)
             self.queue.put(f"[{message.asctime}] {message.message}")
 
 class CreatorDialog(QDialog):
@@ -57,6 +53,12 @@ class CreatorDialog(QDialog):
         self.privateIpLineEdit.setCursorPosition(0)
         self.publicIpLineEdit.setValidator(ipValidator)
         self.publicIpLineEdit.setCursorPosition(0)
+
+        # get list of network interfaces
+        self.interfaces = psutil.net_if_addrs()
+        self.interfaces = [(a, b[1]) for a, b in self.interfaces.items()]
+        for interface in self.interfaces:
+            self.networkAdapterComboBox.addItem(interface[0])
 
     def setupUi(self, Dialog):
         Dialog.setObjectName("Dialog")
@@ -130,7 +132,6 @@ class CreatorDialog(QDialog):
         self.verticalLayout_7.addWidget(self.networkAdapterButton)
         self.networkAdapterComboBox = QtWidgets.QComboBox(self.widget_6)
         self.networkAdapterComboBox.setObjectName("networkAdapterComboBox")
-        self.networkAdapterComboBox.addItem("")
         self.verticalLayout_7.addWidget(self.networkAdapterComboBox)
         self.verticalLayout_5.addWidget(self.widget_6)
         self.widget_7 = WidgetGroupParent(self.widget_2)
@@ -142,6 +143,7 @@ class CreatorDialog(QDialog):
         self.buttonGroup_4.addButton(self.privateIpButton)
         self.verticalLayout_8.addWidget(self.privateIpButton)
         self.privateIpLineEdit = QtWidgets.QLineEdit(self.widget_7)
+        self.privateIpLineEdit.setInputMask("")
         self.privateIpLineEdit.setObjectName("privateIpLineEdit")
         self.verticalLayout_8.addWidget(self.privateIpLineEdit)
         self.verticalLayout_5.addWidget(self.widget_7)
@@ -158,6 +160,9 @@ class CreatorDialog(QDialog):
         self.publicNetworkLabel.setWordWrap(True)
         self.publicNetworkLabel.setObjectName("publicNetworkLabel")
         self.verticalLayout_6.addWidget(self.publicNetworkLabel)
+        self.UPnPVerifyWidget = UPnPVerify(self.widget_3)
+        self.UPnPVerifyWidget.setObjectName("UPnPVerifyWidget")
+        self.verticalLayout_6.addWidget(self.UPnPVerifyWidget)
         self.widget_4 = WidgetGroupParent(self.widget_3)
         self.widget_4.setObjectName("widget_4")
         self.verticalLayout_9 = QtWidgets.QVBoxLayout(self.widget_4)
@@ -181,6 +186,7 @@ class CreatorDialog(QDialog):
         self.buttonGroup_5.addButton(self.publicIpButton)
         self.verticalLayout_10.addWidget(self.publicIpButton)
         self.publicIpLineEdit = QtWidgets.QLineEdit(self.widget_5)
+        self.publicIpLineEdit.setInputMask("")
         self.publicIpLineEdit.setObjectName("publicIpLineEdit")
         self.verticalLayout_10.addWidget(self.publicIpLineEdit)
         self.verticalLayout_6.addWidget(self.widget_5)
@@ -250,15 +256,12 @@ class CreatorDialog(QDialog):
         self.silentButton.setText(_translate("Dialog", "Silent Installation"))
         self.localNetworkButton.setText(_translate("Dialog", "Connect to local network...."))
         self.networkAdapterButton.setText(_translate("Dialog", "Choose Network Adapter...."))
-        self.networkAdapterComboBox.setItemText(0, _translate("Dialog", "In Progress..."))
         self.privateIpButton.setText(_translate("Dialog", "Custom Network Card IP"))
-        # self.privateIpLineEdit.setInputMask(_translate("Dialog", "000.000.000.000;"))
         self.publicNetworkButton.setText(_translate("Dialog", "Connect to public IP or hostname...."))
         self.publicNetworkLabel.setText(_translate("Dialog",
                                                    "<html><head/><body><p><span style=\" font-size:7pt; font-weight:600;\">Note</span><span style=\" font-size:7pt;\">: NetAdmin will try to port-forward port 49152 on your router via the UPnP protocol, requiring your router to support it. If your router does not support UPnP, you can opt to manually forward the port on your router to your computer\'s appropriate network card.</span></p></body></html>"))
         self.dnsButton.setText(_translate("Dialog", "DNS-Resolvable Hostname"))
         self.publicIpButton.setText(_translate("Dialog", "Public IP (Static IP required)"))
-        # self.publicIpLineEdit.setInputMask(_translate("Dialog", "000.000.000.000;"))
         self.manualButton.setText(_translate("Dialog", "Manual Installation (Installer-like)"))
         self.buildOutputGroupBox.setTitle(_translate("Dialog", "Build Output"))
         self.buildInstallerButton.setText(_translate("Dialog", "Build Installer"))
@@ -289,7 +292,7 @@ class CreatorDialog(QDialog):
             if c == '\0':
                 break
             outputDir += c
-        outputDir = os.path.join(outputDir, "ClientBuilder\\NetAdmin")
+        outputDir = os.path.join(outputDir, "NetAdmin\\ClientBuilder")
 
         # if manual installation
         q = Queue()
@@ -304,7 +307,9 @@ class CreatorDialog(QDialog):
                     ip = self.privateIpLineEdit.text()
                     t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "ip", ip))
                 else:
-                    # TODO - implement choose network adapter
+                    ip = self.interfaces[self.networkAdapterComboBox.currentIndex()][1].address
+                    print("Selected ip in creator combobox = " + ip)
+                    t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "ip", ip))
                     pass
             else:
                 if self.dnsButton.isChecked():
@@ -361,7 +366,7 @@ class CreatorDialog(QDialog):
 
         client_builder.build(options)
         outputRedirector.queue.put("*FINISHED*")
-        os.startfile(outputDir, "explore")
+        subprocess.Popen(rf'explorer /select,{outputDir}')
 
     def onFinished(self, result):
         CreatorDialog.currentDialog = None

@@ -1,18 +1,15 @@
-import time
+import upnpclient
 
-import numpy as np
-import cv2
-from mss import mss
-from PIL import Image
-
-bounding_box = {'top': 0, 'left': 0, 'width': 1, 'height': 1}
-
-sct = mss()
-
-while True:
-    start = time.time()
-    sct_img = sct.grab(bounding_box)
-    print(1/(time.time()-start))
-    if (cv2.waitKey(1) & 0xFF) == ord('q'):
-        cv2.destroyAllWindows()
-        break
+devices = upnpclient.discover()
+for device in devices:
+    if hasattr(device, 'WANIPConn1'):
+        print(device.WANIPConn1.AddPortMapping(
+            NewRemoteHost="0.0.0.0",
+            NewExternalPort=49152,
+            NewProtocol="TCP",
+            NewInternalPort=49152,
+            NewInternalClient="192.168.1.205",
+            NewEnabled='1',
+            NewPortMappingDescription="NetAdmin Server Port Forward",
+            NewLeaseDuration=100000
+        ))

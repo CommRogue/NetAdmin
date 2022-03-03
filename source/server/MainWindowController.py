@@ -1,7 +1,5 @@
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QRunnable, QThreadPool, pyqtSlot
-
-import MWindowModel
-from MWindowModel import Client
+import GUIHelpers
 from NetProtocol import *
 import logging
 from UIClientEntry import UIClientEntry
@@ -10,14 +8,17 @@ from InspectionWindowController import ClientInspectorController
 from PyQt5.QtWidgets import QMessageBox
 import functools
 from collections import OrderedDict
+import MWindowModel
 
 class MainWindowController(QObject):
     sThreadPool_runningTaskCountChanged = pyqtSignal()
+    sUpnp_status = pyqtSignal(bool, str)
 
     def __init__(self, view, databaseClients):
         super().__init__()
         self.view = view
         self.sThreadPool_runningTaskCountChanged.connect(self.onThreadPoolTaskCountChange)
+        self.sUpnp_status.connect(self.onUpnpStatus)
         self.view.ClientTable.cellClicked.connect(self.onSelection)
         self.view.ToolBarOpenAction.triggered.connect(self.onClientInspect)
         self.view.ToolBarDeleteAction.triggered.connect(self.onClientDelete)
@@ -35,11 +36,22 @@ class MainWindowController(QObject):
             clientEntry.addToTable(self.view.ClientTable)
             self.clientEntries[databaseclient[0]] = clientEntry # add the UIClientEntry to clientEntries with the uuid as the key
 
+    def onUpnpStatus(self, status, err):
+        if status:
+            self.view.statusBar.showMessage("UPnP port forwarding enabled successfully!")
+        else:
+            msgBox = GUIHelpers.getinfobox("UPnP Port Forwarding Error", err, self.view)
+            msgBox.show()
+            self.view.statusBar.showMessage("UPnP port forwarding failed!")
+        # set the upnp status in MainWindowModel to the updated status (for any UPnPVerify widgets to get the status when initializing)
+        MWindowModel.UPNP_STATUS = status
+
     def onThreadPoolTaskCountChange(self):
         """
         Function that is called when the thread pool task count changes. It updates the status bar with the current task count.
         """
-        self.view.statusBar.showMessage(f"Thread pool task count: {QThreadPool.globalInstance().activeThreadCount()}/12")
+        pass
+        # self.view.statusBar.showMessage(f"Thread pool task count: {QThreadPool.globalInstance().activeThreadCount()}/12")
 
     def createClientInspector(self, client):
         """

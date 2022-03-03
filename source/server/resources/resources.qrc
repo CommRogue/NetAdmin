@@ -1,5 +1,7 @@
 <RCC>
   <qresource>
+    <file alias="xmark">x-mark-64.ico</file>
+    <file alias="checkmark">checkmark-64.ico</file>
     <file>images/loading-934433.png</file>
     <file>images/refresh-2-64 (1).ico</file>
     <file alias="deleteIcon">images/delete.png</file>

@@ -4,12 +4,19 @@ from PyQt5.QtWidgets import QMessageBox
 import PyQt5.QtCore
 import logging
 
-def infobox(title, text):
-    logging.info("GUI: InfoBox: " + text)
-    dialog = QMessageBox()
+def getinfobox(title, text, parent=None):
+    if parent:
+        dialog = QMessageBox(parent)
+    else:
+        dialog = QMessageBox()
     dialog.setText(text)
     dialog.setWindowTitle(title)
     dialog.setStandardButtons(QMessageBox.Ok)
+    return dialog
+
+def infobox(title, text, parent=None):
+    logging.info("GUI: InfoBox: " + text)
+    dialog = getinfobox(title, text, parent)
     dialog.exec_()
 
 def sizeLoadingBox(path):

@@ -2,6 +2,7 @@ import functools
 import threading
 import time
 import MWindowModel
+import OpenConnectionHelpers
 import global_windowhooks
 from MainWindowView import MainWindow
 from MainWindowController import MainWindowController
@@ -71,8 +72,17 @@ def instantiateDb(path):
 def except_hook(cls, exception, traceback):
     sys.__excepthook__(cls, exception, traceback)
 
+def background_verify_upnp(finish_signal):
+    """
+    Function to run a thread on. Calls OpenConnectionHelpers.verify_upnp() and emits the specified signal when finished.
+    Args:
+        finish_signal: signal to emit when finished.
+    """
+    status, err_msg = OpenConnectionHelpers.verify_upnp()
+    finish_signal.emit(status, err_msg)
 
-def main():
+
+def main(verify_upnp=True):
     import sys
     # create thread on threadCount
 
@@ -89,6 +99,11 @@ def main():
     global_windowhooks.init(model, controller)
 
     mw.show()
+
+    if verify_upnp:
+        verify_upnp_thread = threading.Thread(target=background_verify_upnp, args=(controller.sUpnp_status,))
+        verify_upnp_thread.start()
+        window.statusBar.showMessage("Enabling UPnP.... This may take some time....")
 
     try:
         sys.exit(app.exec_())

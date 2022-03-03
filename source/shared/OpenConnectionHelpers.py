@@ -1,14 +1,17 @@
 import socket
 import os, sys
+
+from PyQt5.QtWidgets import QApplication
+
+import GUIHelpers
+
 sys.path.insert(1, os.path.join(sys.path[0], '../server'))
 import MWindowModel
 from NetProtocol import *
 import os
-from PyQt5.QtCore import pyqtSignal
 import threading
-
+import upnpclient
 from NetProtocol import NetMessage, NetTypes, NetStatus, NetStatusTypes, NetProtocol
-
 
 class SharedBoolean:
     def __init__(self, init_value):
@@ -34,6 +37,52 @@ def verify_dir(dir):
         return False
     return True
 
+def verify_upnp(port=49152):
+    '''
+    Uses the forward_upnp function to forward the specified port, while handling exceptions and returning the result and an optional error message that the caller can display to the user if needed.
+    Args:
+        port: the port to forward.
+
+    Returns:
+        True if the port was forwarded on at least one UPnP device, False otherwise.
+    '''
+    res = False
+    err_msg = None
+    try:
+        res = forward_upnp(port)
+    except Exception as e:
+        err_msg = "NetAdmin encountered the following error while trying to forward port 49152 via UPnP: \n"+str(e)
+    else:
+        if not res:
+            err_msg = "NetAdmin could not find any compatible UPnP devices to port-forward your connection. If you would like computers outside of your network to connect to this application, either enable UPnP on your router, or manually set up port-forwarding on port 49152 on your router."
+    return res, err_msg
+
+def forward_upnp(port=49152):
+    """
+    Forwards the specified port to all available UPnP devices that support the AddPortMapping action in the WANIPConn1 service.
+    Args:
+        port: the port to forward.
+    Returns:
+        True if the port was forwarded on at least one UPnP device, False otherwise.
+    """
+    forwarded = False
+    devices = upnpclient.discover()
+    # iterate the devices that we discovered that support UPnP
+    for device in devices:
+        # if UPnP device has the WANIPConn1 service
+        if hasattr(device, 'WANIPConn1'):
+            device.WANIPConn1.AddPortMapping(
+                NewRemoteHost="0.0.0.0",
+                NewExternalPort=port,
+                NewProtocol="TCP",
+                NewInternalPort=port,
+                NewInternalClient="192.168.1.205",
+                NewEnabled='1',
+                NewPortMappingDescription="NetAdmin Server Port Forward",
+                NewLeaseDuration=100000
+            )
+            forwarded = True
+    return forwarded
 
 def sendfile(directory, socket):
     try:

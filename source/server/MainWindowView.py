@@ -3,6 +3,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from CreatorDialog import CreatorDialog
+import qrc_resources
 import global_windowhooks
 
 

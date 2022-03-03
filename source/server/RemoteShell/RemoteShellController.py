@@ -1,7 +1,7 @@
 import GUIHelpers
 import threading
 from OpenConnectionHelpers import *
-from PyQt5.QtCore import QObject
+from PyQt5.QtCore import QObject, pyqtSignal
 import socket
 
 

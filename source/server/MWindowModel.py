@@ -1,22 +1,18 @@
 import ipaddress
 import os
 import sys
-import typing
-import re
 import json
 from urllib.request import urlopen
 import threading
 import socket
 import select
-import uuid
 import queue
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QRunnable, QThreadPool
 import functools
-import orjson
 from time import sleep
-import logging
 import SocketLock
-from PyQt5.QtSql import QSqlDatabase, QSqlQuery, QSqlError, QSqlQueryModel
+from PyQt5.QtSql import QSqlDatabase, QSqlQuery
+import upnpclient
 import uuid
 import UniqueID
 sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
@@ -33,6 +29,8 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
     END = '\033[0m'
+
+UPNP_STATUS = False
 
 # the UID instance for generating IDs for each message to be echoed by the client
 UniqueIDInstance = UniqueID.UniqueIDInstance()
@@ -569,7 +567,6 @@ class MainWindowModel(QObject): #fix main window closing and not client inspecti
 
     def install(self):
         pass
-
 
 #acquire and release client.socket_lock
     # def persist_connection(func):

@@ -109,13 +109,7 @@
                   </widget>
                  </item>
                  <item>
-                  <widget class="QComboBox" name="networkAdapterComboBox">
-                   <item>
-                    <property name="text">
-                     <string>In Progress...</string>
-                    </property>
-                   </item>
-                  </widget>
+                  <widget class="QComboBox" name="networkAdapterComboBox"/>
                  </item>
                 </layout>
                </widget>
@@ -136,7 +130,7 @@
                  <item>
                   <widget class="QLineEdit" name="privateIpLineEdit">
                    <property name="inputMask">
-                    <string>000.000.000.000;_</string>
+                    <string/>
                    </property>
                   </widget>
                  </item>
@@ -168,6 +162,9 @@
                  <bool>true</bool>
                 </property>
                </widget>
+              </item>
+              <item>
+               <widget class="UPnPVerify" name="UPnPVerifyWidget" native="true"/>
               </item>
               <item>
                <widget class="WidgetGroupParent" name="widget_4" native="true">
@@ -204,7 +201,7 @@
                  <item>
                   <widget class="QLineEdit" name="publicIpLineEdit">
                    <property name="inputMask">
-                    <string>000.000.000.000;_</string>
+                    <string/>
                    </property>
                   </widget>
                  </item>
@@ -324,6 +321,12 @@
    <header>CustomWidgets</header>
    <container>1</container>
   </customwidget>
+  <customwidget>
+   <class>UPnPVerify</class>
+   <extends>QWidget</extends>
+   <header>CustomWidgets.h</header>
+   <container>1</container>
+  </customwidget>
  </customwidgets>
  <resources/>
  <connections>
@@ -361,9 +364,9 @@
   </connection>
  </connections>
  <buttongroups>
-  <buttongroup name="buttonGroup_2"/>
-  <buttongroup name="buttonGroup_5"/>
   <buttongroup name="buttonGroup_3"/>
   <buttongroup name="buttonGroup_4"/>
+  <buttongroup name="buttonGroup_2"/>
+  <buttongroup name="buttonGroup_5"/>
  </buttongroups>
 </ui>
