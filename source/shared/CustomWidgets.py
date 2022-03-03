@@ -11,7 +11,7 @@ class WidgetGroupParent(QWidget):
     def initialize(self):
         firstElement, elements = self.getTopAndChildrenWidgets()
         for element in elements:
-            element.setEnabled(False)
+            element.setVisible(False)
         if not isinstance(firstElement, QRadioButton):
             raise Exception("WidgetGroupParent must have a QRadioButton as first child")
         firstElement.toggled.connect(lambda state: self.setChildState(state))
@@ -24,7 +24,7 @@ class WidgetGroupParent(QWidget):
     def setChildState(self, state):
         _, children = self.getTopAndChildrenWidgets()
         for child in children:
-            child.setEnabled(state)
+            child.setVisible(state)
 
 
 class InformationDisplayTable(QTableWidget):

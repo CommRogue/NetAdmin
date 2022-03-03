@@ -1,13 +1,19 @@
 import configparser
 import logging
 import os
+import pathlib
+import subprocess
 import sys
 import threading
 from multiprocessing import Process
 import multiprocessing.queues
 from queue import Queue
+
+from PyQt5.QtCore import QRegExp
 from PyQt5.QtWidgets import QDialog, QApplication
 from PyQt5 import QtCore, QtGui, QtWidgets
+
+import GUIHelpers
 import client_builder
 from CustomWidgets import WidgetGroupParent
 import logging
@@ -32,7 +38,7 @@ class LoggingHandlerRedirector(logging.Handler):
     def emit(self, message):
         print('logging handler got', message)
         if 'pyinstaller' in message.name.lower():
-            self.queue.put(message.msg)
+            self.queue.put(f"[{message.asctime}] {message.message}")
 
 class CreatorDialog(QDialog):
     currentDialog = None
@@ -44,6 +50,13 @@ class CreatorDialog(QDialog):
         self.widget_5.initialize()
         self.widget_6.initialize()
         self.widget_7.initialize()
+        ipRange = "(?:[0-1]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])"
+        ipRegex = QRegExp("^" + ipRange + "\\." + ipRange + "\\." + ipRange + "\\." + ipRange + "$")
+        ipValidator = QtGui.QRegExpValidator(ipRegex, self)
+        self.privateIpLineEdit.setValidator(ipValidator)
+        self.privateIpLineEdit.setCursorPosition(0)
+        self.publicIpLineEdit.setValidator(ipValidator)
+        self.publicIpLineEdit.setCursorPosition(0)
 
     def setupUi(self, Dialog):
         Dialog.setObjectName("Dialog")
@@ -239,13 +252,13 @@ class CreatorDialog(QDialog):
         self.networkAdapterButton.setText(_translate("Dialog", "Choose Network Adapter...."))
         self.networkAdapterComboBox.setItemText(0, _translate("Dialog", "In Progress..."))
         self.privateIpButton.setText(_translate("Dialog", "Custom Network Card IP"))
-        self.privateIpLineEdit.setInputMask(_translate("Dialog", "000.000.000.000;_"))
+        # self.privateIpLineEdit.setInputMask(_translate("Dialog", "000.000.000.000;"))
         self.publicNetworkButton.setText(_translate("Dialog", "Connect to public IP or hostname...."))
         self.publicNetworkLabel.setText(_translate("Dialog",
                                                    "<html><head/><body><p><span style=\" font-size:7pt; font-weight:600;\">Note</span><span style=\" font-size:7pt;\">: NetAdmin will try to port-forward port 49152 on your router via the UPnP protocol, requiring your router to support it. If your router does not support UPnP, you can opt to manually forward the port on your router to your computer\'s appropriate network card.</span></p></body></html>"))
         self.dnsButton.setText(_translate("Dialog", "DNS-Resolvable Hostname"))
         self.publicIpButton.setText(_translate("Dialog", "Public IP (Static IP required)"))
-        self.publicIpLineEdit.setInputMask(_translate("Dialog", "000.000.000.000;_"))
+        # self.publicIpLineEdit.setInputMask(_translate("Dialog", "000.000.000.000;"))
         self.manualButton.setText(_translate("Dialog", "Manual Installation (Installer-like)"))
         self.buildOutputGroupBox.setTitle(_translate("Dialog", "Build Output"))
         self.buildInstallerButton.setText(_translate("Dialog", "Build Installer"))
@@ -268,38 +281,46 @@ class CreatorDialog(QDialog):
         CSIDL_PERSONAL = 5  # My Documents
         SHGFP_TYPE_CURRENT = 0  # Get current, not default value
 
-        outputDir = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
-        ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, outputDir)
+        # get user documents folder
+        od = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+        ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, od)
+        outputDir = ""
+        for c in od:
+            if c == '\0':
+                break
+            outputDir += c
+        outputDir = os.path.join(outputDir, "ClientBuilder\\NetAdmin")
 
         # if manual installation
         q = Queue()
         outputRedirector = LoggingHandlerRedirector(q)
-        if self.manualButton.toggled:
-            logging.getLogger().addHandler(outputRedirector)
+        logging.getLogger().addHandler(outputRedirector)
+
+        if self.manualButton.isChecked():
             t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "manual",))
         else:
-            if self.localNetworkButton.toggled:
-                if self.privateIpButton.toggled:
+            if self.localNetworkButton.isChecked():
+                if self.privateIpButton.isChecked():
                     ip = self.privateIpLineEdit.text()
                     t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "ip", ip))
                 else:
                     # TODO - implement choose network adapter
                     pass
             else:
-                if self.dnsButton.toggled:
+                if self.dnsButton.isChecked():
                     hostname = self.dnsLineEdit.text()
                     t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "hostname", hostname))
                 else:
                     ip = self.publicIpLineEdit.text()
                     t = threading.Thread(target=self.build, args=(outputDir, outputRedirector, "ip", ip))
 
-        # create temporary runconfig in documents folder
 
         t.start()
         while True:
             try:
                 item = q.get(timeout=0.05)
                 if str(item) == "*FINISHED*":
+                    GUIHelpers.infobox("Build Complete", "Build Complete")
                     break
                 else:
                     self.buildOutputTextEdit.append(str(item))
@@ -312,6 +333,7 @@ class CreatorDialog(QDialog):
     def build(self, outputDir, outputRedirector, type, ip_or_hostname=None, port=PORT):
         options = [
             '..\\client\\main.py',
+            f'--distpath={os.path.join(outputDir, "build")}',
             '--onefile',
             '--runtime-tmpdir=.',
             '--add-binary=lib_bin\\turbojpeg-bin\\turbojpeg.dll;.',
@@ -325,21 +347,21 @@ class CreatorDialog(QDialog):
         config = None
         if type != "manual":
             config = configparser.ConfigParser()
-            config["CONNECTION"]['type'] = type
-            config["CONNECTION"]['ip_or_hostnae'] = ip_or_hostname
-            config["CONNECTION"]['port'] = str(port)
+            config["CONNECTION"] = {
+                "type": type,
+                "ip_or_hostname": ip_or_hostname,
+                "port": str(port)
+            }
             configdir = os.path.join(outputDir, "temp")
-            with open(configdir) as configfile:
+            pathlib.Path(configdir).mkdir(parents=True, exist_ok=True)
+            configdir = os.path.join(configdir, "runconfig.ini")
+            with open(configdir, "w+") as configfile:
                 config.write(configfile)
-                options.append(f"--add-data={configdir};.")
-
-        if type == "ip":
-            pass
-        if type == "hostname":
-            pass
+            options.append(f"--add-data={configdir};.")
 
         client_builder.build(options)
-        outputRedirector.put("*FINISHED*")
+        outputRedirector.queue.put("*FINISHED*")
+        os.startfile(outputDir, "explore")
 
     def onFinished(self, result):
         CreatorDialog.currentDialog = None
