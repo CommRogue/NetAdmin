@@ -107,3 +107,9 @@
 #     w = MainWindow()`
 #     w.show()
 #     app.exec_()
+
+
+import fernet
+
+b = fernet.Fernet.generate_key().decode("utf-8")
+print(b)

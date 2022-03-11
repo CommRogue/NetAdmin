@@ -52,11 +52,11 @@ def instantiateDb(path):
 
     #creating the table if it doesn't exist
     createTable = QSqlQuery()
-    createTable.exec_("CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL, uuid TEXT, address TEXT)")
+    createTable.exec_("CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL, uuid TEXT, address TEXT, ekey TEXT)")
 
     #getting all the clients
     findClients = QSqlQuery()
-    findClients.exec_("SELECT uuid, address FROM clients")
+    findClients.exec_("SELECT uuid, address, ekey FROM clients")
 
     # walking through the clients that were found in the database
     while(findClients.next()):

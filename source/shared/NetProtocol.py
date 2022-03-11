@@ -34,6 +34,7 @@ class NetTypes(Enum):
     NetGetKeylogger = 22
     NetGetClipboard = 23
     NetText = 24
+    NetEncryptionVerification = 25
 
 class NetStatusTypes(Enum):
     NetOK = 0
@@ -167,17 +168,6 @@ class NetProtocol:
     @staticmethod
     def serialize(data):
         return orjson.dumps(data)
-
-    # serialize and add byte size
-    @staticmethod
-    def messagePacker(func):
-        def wrapper(*args, **kwargs):
-            res = func(**args, **kwargs)
-            res = NetProtocol.serialize(res)
-            res = struct.pack(">I", len(res)) + res
-            return res
-
-        return wrapper
 
     @staticmethod
     def packNetMessage(data: NetMessage) -> bytes:

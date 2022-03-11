@@ -1,10 +1,13 @@
 import ipaddress
 import os
 import sys
+import base64
 import json
 from urllib.request import urlopen
 import threading
 import socket
+
+import fernet
 import select
 import queue
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QRunnable, QThreadPool
@@ -43,6 +46,12 @@ clients = {}
 temp_identifiers = {}
 
 logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(levelname)s:' + bcolors.OKGREEN + '    %(message)s' + bcolors.END, level=logging.DEBUG)
+
+def stringToBase64(s):
+    return base64.urlsafe_b64encode(s.encode('ascii'))
+
+def base64ToString(b):
+    return base64.urlsafe_b64decode(b).decode('ascii')
 
 def threadpool_job_tracker(attr_str):
     def decorator(func):
@@ -159,12 +168,28 @@ class Client(QObject):
     systemMetrics = None
     geoInformation = None
 
+    # datalock
+    dataLock = None
+
+    # message_queue
+    _message_queue = None
+
+    # authentication segments
+    # -----------------------
+    _confirmedId = False
+    _confirmedEncryption = False
+
+
     # Signals
     # ---------------
     sSystemInformation_update = pyqtSignal()
     sSystemMetrics_update = pyqtSignal()
     sConnection_start = pyqtSignal()
     sConnection_end = pyqtSignal()
+
+    # conditions
+    # send a message to the waiting identification thread that the client has fully identified itself
+    identificationNotification = None
 
     #toString function
     def __str__(self):
@@ -210,10 +235,10 @@ class Client(QObject):
             else:
                 raise Exception('Response event already exists')
             data.id = id #send the id to the client so it can copy it
-            self._message_queue.put(NetProtocol.packNetMessage(data))
+            self._message_queue.put(self._socket.packMessage(data))
             return response_events[id]
         else:
-            self._message_queue.put(NetProtocol.packNetMessage(data))
+            self._message_queue.put(self._socket.packMessage(data))
 
 class DatabaseHelpers:
     @staticmethod
@@ -240,14 +265,14 @@ class DatabaseHelpers:
         Args:
             uuid: the client's uuid to search for.
 
-        Returns: a tuple of (client_address, client_uuid) if the client is found, None otherwise.
+        Returns: a tuple of (client_address, client_uuid, encryption_key) if the client is found, None otherwise.
 
         """
         findClients = QSqlQuery(database)
-        findClients.exec_("SELECT uuid, address FROM clients WHERE uuid = '" + uuid + "'")
+        findClients.exec_("SELECT uuid, address, ekey FROM clients WHERE uuid = '" + uuid + "'")
         if findClients.next():
             logging.debug(f"Found client in database {uuid}")
-            return (findClients.value(1), findClients.value(0))
+            return (findClients.value(1), findClients.value(0), findClients.value(2))
         else:
             return None
 
@@ -262,13 +287,16 @@ class DatabaseHelpers:
         #     return None
 
     @staticmethod
-    def insert_client(database : QSqlDatabase, uuid : str, address : str):
-        logging.debug(f"Inserting client {uuid} at {address}")
+    def insert_client(database : QSqlDatabase, uuid : str, address : str, ekey : str):
+        logging.debug(f"Inserting client {uuid} at {address} with encryption key {ekey}")
         insertClient = QSqlQuery(database)
-        insertClient.prepare(f"INSERT INTO clients (uuid, address) VALUES (?, ?)")
+        insertClient.prepare(f"INSERT INTO clients (uuid, address, ekey) VALUES (?, ?, ?)")
         insertClient.addBindValue(uuid)
         insertClient.addBindValue(address)
+        insertClient.addBindValue(ekey)
         insertClient.exec_()
+        # print get last error
+        print(insertClient.lastError().text())
 
 
 
@@ -279,7 +307,7 @@ class MessageHandler(QRunnable):
 
     # qt signal for signaling that the task is started/finished to control the status bar task count
 
-    def __init__(self, client: Client, message: bytes, taskCountEvent : pyqtSignal):
+    def __init__(self, client: Client, message: bytes, taskCountEvent : pyqtSignal, isEncrypted):
         super().__init__()
         self.client = client
         # undecoded message in bytes
@@ -288,6 +316,7 @@ class MessageHandler(QRunnable):
         self.message = None
         # qt signal for signaling that the task is started/finished to control the status bar task count
         self.event = taskCountEvent
+        self.isEncrypted = isEncrypted
 
     @threadpool_job_tracker("event")
     def run(self) -> None:
@@ -304,117 +333,159 @@ class MessageHandler(QRunnable):
 
         # --- start of message handling ---
 
-        if self.message["type"] == NetTypes.NetRequest:
-            pass
+        self.client.dataLock.acquire_read()
+        isVerified = (self.client._confirmedId and self.client._confirmedEncryption)
+        self.client.dataLock.release_read()
 
-        # if client sent an status code
-        elif self.message["type"] == NetTypes.NetStatus.value:
-            # set the event data to the status message
-            datastructure = NetStatus(**self.message['data']) # 'data' field contains a NetError instance
-            eventAttachedData = datastructure
 
-        # if related to identification
-        elif self.message["type"] == NetTypes.NetIdentification.value: #check if client sent ID or else send ID
-            con = DatabaseHelpers.open_database(os.getenv("LOCALAPPDATA")+"\\NetAdmin\\clients.db")
 
-            #if existing client sent identification
-            if self.message['data']["id"] != "":
-                # check if found in temporary ids
-                f = temp_identifiers.get(self.message['data']["id"])
-                # if we found the identifier, and the corresponding client is the client that send the identification
-                if f == self.client:
-                    # add client to database
-                    logging.info(f"Client {self.client.address} FOUND in temporary ids. Adding...")
-                    DatabaseHelpers.insert_client(con, self.message['data']['id'], self.client.address[0])
-                    found = True
+        if not isVerified:
+            # if related to encryption
+            if self.message["type"] == NetTypes.NetEncryptionVerification.value:
+                # check if message was encrypted
+                if self.isEncrypted:
+                    # check if client confirmed its id
+                    logging.debug(f"received encrypted message")
+                    self.client.dataLock.acquire_read()
+                    confirmedId = self.client._confirmedId
+                    self.client.dataLock.release_read()
+                    if confirmedId:
+                        self.client.identificationNotification.acquire()
+                        self.client.identificationNotification.notify_all()
+                        self.client.identificationNotification.release()
 
-                else: # if identifier not in temporary
-                    # check if id is found in database
-                    found = DatabaseHelpers.find_client(con, self.message['data']["id"])
+            # if related to identification
+            elif self.message["type"] == NetTypes.NetIdentification.value:  # check if client sent ID or else send ID
+                con = DatabaseHelpers.open_database(os.getenv("LOCALAPPDATA") + "\\NetAdmin\\clients.db")
 
-                    # if id not found in temp and database, log and send error to the client
-                    if found is None:
-                        logging.debug(f"Client {self.client.address[0]} sent INVALID identification {self.message['data']['id']}")
-                        self.client.send_message(NetMessage(NetTypes.NetStatus, NetStatusTypes.NetInvalidIdentification))
+                # if existing client sent identification
+                if self.message['data']["id"] != "":
+                    # check if found in temporary ids
+                    f = temp_identifiers.get(self.message['data']["id"])
+                    # if we found the identifier, and the corresponding client is the client that send the identification
+                    if f:
+                        if f[0] == self.client:
+                            # add client to database
+                            logging.info(
+                                f"Client {self.client.address} FOUND in temporary ids. Waiting for encryption confirmation...")
+                            DatabaseHelpers.insert_client(con, self.message['data']['id'], self.client.address[0], f[1].decode())
+                            found = True
+                        else:
+                            found = False
 
-                #if identification is found and valid then log, set the local client instance's uid, and notify identificationNotification
-                if found is not None:
-                    logging.debug(f"Client {self.client.address[0]} sent valid identification {self.message['data']['id']}")
-                    self.client.uuid = self.message['data']["id"]
-                    logging.debug(f"Client {self.client.address} identified as {self.client.uuid}")
-                    self.client.identificationNotification.acquire()
-                    self.client.identificationNotification.notify_all()
-                    self.client.identificationNotification.release()
+                    else:  # if identifier not in temporary
+                        # check if id is found in database
+                        found = DatabaseHelpers.find_client(con, self.message['data']["id"])
 
-            # if new client wants identification
-            else:
-                # generate a new uuid
-                uid = uuid.uuid4().hex
-                cid = uid
-                logging.info(f"Client {self.client.address} sent identification request. Generating new ID {cid} and sending...")
+                        # if id not found in temp and database, log and send error to the client
+                        if found is None:
+                            logging.debug(
+                                f"Client {self.client.address[0]} sent INVALID identification {self.message['data']['id']}")
+                            self.client.send_message(
+                                NetMessage(NetTypes.NetStatus, NetStatusTypes.NetInvalidIdentification))
 
-                #send the new id to the client, add it to the database, and request the client to authunticate again
-                self.client.send_message(NetMessage(NetTypes.NetIdentification, NetIdentification(cid))) #send a client id
-                temp_identifiers[cid] = self.client
-                self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification)) #request to identify again
+                    # if identification is found and valid then log, set the local client instance's uid, and notify identificationNotification
+                    if found is not None:
+                        logging.debug(
+                            f"Client {self.client.address[0]} sent valid identification {self.message['data']['id']}")
+                        self.client.uuid = self.message['data']["id"]
+                        logging.debug(f"Client {self.client.address} identified as {self.client.uuid}")
+                        self.client.dataLock.acquire_write()
+                        self.client._confirmedId = True
+                        self.client.dataLock.release_write()
+                        # request client to send hello with encryption
+                        self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetEncryptionVerification))
+                        _, _, EKey = DatabaseHelpers.find_client(con, self.client.uuid)
+                        self.client.dataLock.acquire_write()
+                        # move to encryption
+                        d = EKey.encode()
+                        self.client._socket.set_key(d)
+                        self.client.dataLock.release_write()
 
-        # if related to response to system information
-        elif self.message["type"] == NetTypes.NetSystemInformation.value:
-            # load the system information datastructure from the message, update the local client instance, and emit sSystemInformation_update
-            data = self.message["data"]
-            dataStructure = NetSystemInformation(**data)
 
-            self.client.dataLock.acquire_write()
-            self.client.systemInformation = dataStructure
-            self.client.dataLock.release_write()
+                # if new client wants identification
+                else:
+                    # generate a new uuid
+                    uid = uuid.uuid4().hex
+                    cid = uid
+                    logging.info(
+                        f"Client {self.client.address} sent identification request. Generating new ID {cid} and sending...")
 
-            self.client.sSystemInformation_update.emit()
+                    # send the new id to the client, add it to the database, and request the client to authunticate again
+                    fernetKey = fernet.Fernet.generate_key()
+                    self.client.send_message(
+                        NetMessage(NetTypes.NetIdentification, NetIdentification(cid), extra=fernetKey.decode()))  # send a client id
+                    temp_identifiers[cid] = (self.client, fernetKey)
+                    self.client.send_message(
+                        NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification))  # request to identify again
 
-        # if related to response to directory size
-        elif self.message["type"] == NetTypes.NetDirectorySize.value:
-            # load the directory size datastructure from the message, update the local client instance, and emit sDirectorySize_update
-            data = self.message["data"]
-            dataStructure = NetDirectorySize(**data)
-            eventAttachedData = dataStructure
+        else:
+            if self.message["type"] == NetTypes.NetRequest:
+                pass
 
-        # if related to response to text request
-        elif self.message["type"] == NetTypes.NetText.value:
-            # load the directory size datastructure from the message, update the local client instance, and emit sDirectorySize_update
-            data = self.message["data"]
-            dataStructure = NetText(**data)
-            eventAttachedData = dataStructure
+            # if client sent an status code
+            elif self.message["type"] == NetTypes.NetStatus.value:
+                # set the event data to the status message
+                datastructure = NetStatus(**self.message['data']) # 'data' field contains a NetError instance
+                eventAttachedData = datastructure
 
-        # if related to response to metrics
-        elif self.message["type"] == NetTypes.NetSystemMetrics.value: #ADD CHECKS FOR VALID METRICS
-            # load the system metrics datastructure from the message, update the local client instance, and emit sSystemMetrics_update
-            data = self.message["data"]
-            dataStructure = NetSystemMetrics(**data)
+            # if related to response to system information
+            elif self.message["type"] == NetTypes.NetSystemInformation.value:
+                # load the system information datastructure from the message, update the local client instance, and emit sSystemInformation_update
+                data = self.message["data"]
+                dataStructure = NetSystemInformation(**data)
 
-            if(dataStructure.CPU_LOAD == None): #fix for cpu load being None
-                dataStructure.CPU_LOAD = 0
+                self.client.dataLock.acquire_write()
+                self.client.systemInformation = dataStructure
+                self.client.dataLock.release_write()
 
-            self.client.dataLock.acquire_write()
-            self.client.systemMetrics = dataStructure
-            self.client.dataLock.release_write()
-            self.client.sSystemMetrics_update.emit()
+                self.client.sSystemInformation_update.emit()
 
-        # if related to response to directory listing
-        elif self.message["type"] == NetTypes.NetDirectoryListing.value:
-            # load the directory listing datastructure from the message, and set the event-attached-data to it, so the thread that called send_message will get the data
-            data = self.message["data"]
-            dataStructure = NetDirectoryListing(**data)
-            eventAttachedData = dataStructure
+            # if related to response to directory size
+            elif self.message["type"] == NetTypes.NetDirectorySize.value:
+                # load the directory size datastructure from the message, update the local client instance, and emit sDirectorySize_update
+                data = self.message["data"]
+                dataStructure = NetDirectorySize(**data)
+                eventAttachedData = dataStructure
 
-        # lastly, check if the message is tracked by a thread
-        # if so, then set the event, and optionally attach the data to it
-        if self.message["id"] is not None and self.message["id"] in response_events: #check is message has response id and if it has an event associated with it
-            UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
-            # print(f"Response events before: {response_events}")
-            if eventAttachedData is not None: #if there is data to attach to the event
-                response_events[self.message["id"]].set_data(eventAttachedData, self.message["extra"])
-            response_events[self.message["id"]].set() #set the event to notify the waiting thread
-            response_events.pop(self.message["id"]) #remove the event from the response events
-            # print(f"Response events after: {response_events}")
+            # if related to response to text request
+            elif self.message["type"] == NetTypes.NetText.value:
+                # load the directory size datastructure from the message, update the local client instance, and emit sDirectorySize_update
+                data = self.message["data"]
+                dataStructure = NetText(**data)
+                eventAttachedData = dataStructure
+
+            # if related to response to metrics
+            elif self.message["type"] == NetTypes.NetSystemMetrics.value: #ADD CHECKS FOR VALID METRICS
+                # load the system metrics datastructure from the message, update the local client instance, and emit sSystemMetrics_update
+                data = self.message["data"]
+                dataStructure = NetSystemMetrics(**data)
+
+                if(dataStructure.CPU_LOAD == None): #fix for cpu load being None
+                    dataStructure.CPU_LOAD = 0
+
+                self.client.dataLock.acquire_write()
+                self.client.systemMetrics = dataStructure
+                self.client.dataLock.release_write()
+                self.client.sSystemMetrics_update.emit()
+
+            # if related to response to directory listing
+            elif self.message["type"] == NetTypes.NetDirectoryListing.value:
+                # load the directory listing datastructure from the message, and set the event-attached-data to it, so the thread that called send_message will get the data
+                data = self.message["data"]
+                dataStructure = NetDirectoryListing(**data)
+                eventAttachedData = dataStructure
+
+            # lastly, check if the message is tracked by a thread
+            # if so, then set the event, and optionally attach the data to it
+            if self.message["id"] is not None and self.message["id"] in response_events: #check is message has response id and if it has an event associated with it
+                UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
+                # print(f"Response events before: {response_events}")
+                if eventAttachedData is not None: #if there is data to attach to the event
+                    response_events[self.message["id"]].set_data(eventAttachedData, self.message["extra"])
+                response_events[self.message["id"]].set() #set the event to notify the waiting thread
+                response_events.pop(self.message["id"]) #remove the event from the response events
+                # print(f"Response events after: {response_events}")
 
 
 class ClientConnectionHandler(QRunnable):
@@ -446,7 +517,7 @@ class ClientConnectionHandler(QRunnable):
         #if the client didn't identify within 10 seconds, close the connection (implement close connection
         if not result:
             logging.warning(f"ClientConnectionHandler did not receive a response to the identification request it sent to {self.client.address[0]}...")
-            #....remove the client from the global list?
+            #TODO remove the client from the global list?
             return
 
         #if the client identified, resolve the client's IP address
@@ -468,6 +539,8 @@ class ClientConnectionHandler(QRunnable):
         self.client.sConnection_start.emit() #emit signal to update UI
 
 LISTENER_RUNNING = True
+
+from SmartSocket import SmartSocket
 
 class ListenerWorker(QObject):
     '''
@@ -499,7 +572,7 @@ class ListenerWorker(QObject):
         #writability - message queue of NetMessages that the controller thread makes. send the message when the socket is writable and there is a message in the queue
 
         threadPool = QThreadPool.globalInstance()
-        self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listener_socket = SmartSocket(None, socket.AF_INET, socket.SOCK_STREAM)
         self.listener_socket.bind((socket.gethostbyname("0.0.0.0"), 49152))
         self.listener_socket.listen(5)
 
@@ -521,7 +594,7 @@ class ListenerWorker(QObject):
 
                 #if the socket is a client socket, then read a new message
                 else:
-                    size, message = NetProtocol.unpackFromSocket(s)
+                    size, message = s.recv_appended_stream()
                     # if unpackFromSocket returns -1, then the socket closed, and therefore the client disconnected
                     if size == -1:
                         #remove the socket from the list of sockets, close the socket, and emit a sConnection_end signal.
@@ -532,7 +605,9 @@ class ListenerWorker(QObject):
                         cl.sConnection_end.emit()
                     #if unpackFromSocket succeeded, then launch a message handler job
                     elif size != 0:
-                        threadPool.start(MessageHandler(clients[s], message, self.controller.sThreadPool_runningTaskCountChanged))
+                        # check if message was encrypted
+                        isEncrypted = s.fernetInstance != None
+                        threadPool.start(MessageHandler(clients[s], message, self.controller.sThreadPool_runningTaskCountChanged, isEncrypted))
 
             # every cycle (0.01 seconds), check if there is a message in the message queue of each client
             # if there is a message in a client's message queue, send the message to the client
