@@ -41,11 +41,12 @@ class DUDialogModel(QObject):
         pathlist = []
         for remotedir in remotedirs:
             # send request to client to download file
-            socket.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetRequest, NetTypes.NetDownloadFile, extra=remotedir)))
+            socket.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetDownloadFile, extra=remotedir))
             # wait for response
             self.status_queue = queue.Queue()
+            # receive files
             received_all, excluded, pathlist = receivefiles(socket, remotedir, localdir, self.status_queue, download_progress_signal, overall_size=totalSize)
-            # # delete all files from pathlist if download was cancelled
+            # delete all files from pathlist if download was cancelled
             excludedCount += excluded
             if not received_all:
                  cancelled = True

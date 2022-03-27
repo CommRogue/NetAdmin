@@ -1,10 +1,6 @@
 import socket
 import os, sys
-
-from PyQt5.QtWidgets import QApplication
-
-import GUIHelpers
-
+import SmartSocket
 sys.path.insert(1, os.path.join(sys.path[0], '../server'))
 import MWindowModel
 from NetProtocol import *
@@ -84,26 +80,30 @@ def forward_upnp(port=49152):
             forwarded = True
     return forwarded
 
-def sendfile(directory, socket):
+def sendfile(directory, socket : SmartSocket.SmartSocket):
     try:
         file = open(directory, 'rb')
     except:
-        socket.send(NetProtocol.packNetMessage(
-            NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value), extra=directory)))
+        socket.send_message(
+            NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value), extra=directory))
     else:
         # get file size
         size = os.path.getsize(directory)
         # get file name from directory
         name = os.path.basename(directory)
         # send file descriptor
-        socket.send(NetProtocol.packNetMessage(
-            NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(directory, size))))
+        socket.send_message(
+            NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(directory, size)))
 
-        # read file and send
-        buffer = file.read(4096)
+        # read file and send exactly maximum of 16KB at a time.
+        # the receiver receives exactly 16KB, or the remainder of the file (which it can calculate using the file size and amount of bytes received)
+        # then the receiver decrypts exactly that amount of data
+        buffer = file.read(16384)
         while buffer:
-            socket.send(buffer)
-            buffer = file.read(4096)
+            if socket.Fkey:
+                print("Encrypted 16KB chunk or file remainder of data on NetTransferProtocol")
+            socket.send_appended_stream(buffer)
+            buffer = file.read(16384)
         file.close()
 
 def sendallfiles(socket, dir) -> None:
@@ -122,13 +122,13 @@ def sendallfiles(socket, dir) -> None:
                     for item in os.scandir(dir):
                         sendallfiles(socket, os.path.join(dir, item.name))
                 else:
-                    socket.send(NetProtocol.packNetMessage(
+                    socket.send_message(
                         NetMessage(type=NetTypes.NetDownloadDirectoryDescriptor.value,
-                                   data=NetDownloadDirectoryDescriptor(dir))))
+                                   data=NetDownloadDirectoryDescriptor(dir)))
             except PermissionError:
-                socket.send(NetProtocol.packNetMessage(
+                socket.send_message(
                     NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value),
-                               extra=dir)))
+                               extra=dir))
     except ConnectionResetError:
         print("Connection reset")
 
@@ -139,7 +139,7 @@ def resolveRemoteDirectoryToLocal(base_remote_directory, actual_remote_directory
     # combine the relative path with the local directory that the user chose
     return  os.path.join(local_directory, relative_path)
 
-def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_progress_signal=None, overall_size=None) -> tuple[
+def receivefiles(socket : SmartSocket.SmartSocket, base_remote_dir, local_dir, status_queue, download_progress_signal=None, overall_size=None) -> tuple[
     bool, int, list[str]]:
     """
     Receives files from the specified socket from a single remote directory or file while reporting progress to the download_progress_signal.
@@ -160,8 +160,8 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
     pathlist = []
     excludedCount = 0
     # receive response, and access index 1 to get data and not size
-    size, message = NetProtocol.unpackFromSocket(socket)
-    response = orjson.loads(message)  # convert the message to dictionary from json
+    size, response, _ = socket.receive_message()
+
     # while we are not getting a file download finished code, continue reading files
     bytes_to_signal = overall_size / 100
     tbs = bytes_to_signal
@@ -187,8 +187,10 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
             with open(path, 'wb+') as f:
                 # read file data in chunks of 1024 bytes
                 while status_queue.empty() and bytes_received < file_size:
-                    # receive data from client in 1024 bytes. if the remaining bytes in the buffer are less than 1024, read the remaining bytes
-                    data = socket.recv(min(1024, file_size - bytes_received))
+                    # receive data from client (size appeneded to 16KB chunks of data because of AES enlargement of bytes.). if the remaining bytes in the buffer are less than 1024, read the remaining bytes
+                    # data = socket.recv_exact(min(16384, file_size - bytes_received), decrypt_if_available=True)
+                    size, data, isEncrypted = socket.recv_appended_stream()
+                    print(f"NetFileTransfer:RECEIVEFILES received an encrypted file chunk: {len(data)} bytes")
                     if not data:
                         # emit -1 signaling that the file has been fully downloaded
                         break
@@ -219,8 +221,7 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
             path = resolveRemoteDirectoryToLocal(base_remote_dir, file_directory, local_dir)
             verify_dir(path)
         # receive next message
-        size, message = NetProtocol.unpackFromSocket(socket)
-        response = orjson.loads(message)  # convert the message to dictionary from json
+        size, response, _ = socket.receive_message()
 
     # if loop exited due to status code cancel, then log
     if not status_queue.empty():
@@ -232,8 +233,21 @@ def receivefiles(socket, base_remote_dir, local_dir, status_queue, download_prog
         logging.info("Receive of 1 item succeeded/excluded.")
         return True, excludedCount, pathlist
 
+def _copy_socket(originalSocket : SmartSocket.SmartSocket):
+    """
+    Copies the socket with the encryption key of the original socket and returns the new socket.
+    Args:
+        originalSocket: the original socket to copy.
 
-def open_connection(client : typing.Union[MWindowModel.Client, socket.socket]):
+    Returns: the new socket with the encryption key of the original socket.
+
+    """
+    key = None
+    if originalSocket.fernetInstance != None:
+        key = originalSocket.Fkey
+    return SmartSocket.SmartSocket(key, socket.AF_INET, socket.SOCK_STREAM)
+
+def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.SmartSocket]):
     """
     Opens a new socket to the client or socket passed in.
     Args:
@@ -253,24 +267,26 @@ def open_connection(client : typing.Union[MWindowModel.Client, socket.socket]):
         # if response is ok
         if type(data) is NetStatus:
             if data.statusCode == NetStatusTypes.NetOK.value:
+                client.dataLock.acquire_read()
+                Fkey = client._socket.Fkey
+                client.dataLock.release_read()
                 # connect to client using new socket
-                ocSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                ocSocket = SmartSocket.SmartSocket(Fkey, socket.AF_INET, socket.SOCK_STREAM)
                 ocSocket.connect((client.address[0], int(extra)))
                 return ocSocket
 
-    if isinstance(client, socket.socket):
+    if isinstance(client, SmartSocket.SmartSocket):
         # send open connection request
-        client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value)))
+        client.send_message((NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value)))
 
         # wait for response and get data from it
-        size, message = NetProtocol.unpackFromSocket(client)
-        message = orjson.loads(message)
+        size, message, isEncrypted = client.receive_message()
         data = message["data"]
         extra = message["extra"]
 
         # if response is ok
         if data == NetStatusTypes.NetOK.value:
             # connect to client using new socket
-            ocSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ocSocket = SmartSocket.SmartSocket(client.Fkey, socket.AF_INET, socket.SOCK_STREAM)
             ocSocket.connect((client.getpeername()[0], int(extra)))
             return ocSocket

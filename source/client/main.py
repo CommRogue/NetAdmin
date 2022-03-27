@@ -133,8 +133,7 @@ try:
         Returns: the server socket.
 
         """
-        server = SmartSocket(socket.AF_INET, socket.SOCK_STREAM)
-        server.set_key(eKey)
+        server = SmartSocket(eKey, socket.AF_INET, socket.SOCK_STREAM)
         server.bind(('0.0.0.0', port))
         server.listen(5)
         return server
@@ -223,12 +222,13 @@ try:
     @try_connection
     def handleOpenConnection(server : SmartSocket):
         client, address = server.accept()
+        client.set_key(server.Fkey)
         print("OpenConnection from: " + str(address))
 
         # listener loop
         while True:
             # read message
-            size, message, isEncrypted = client.recv_message()
+            size, message, isEncrypted = client.receive_message()
             if isEncrypted:
                 print("Decrypted message")
 
@@ -236,7 +236,6 @@ try:
                 # if server disconnected, close local open connection server
                 server.shutdown(socket.SHUT_RDWR)
                 break
-            message = orjson.loads(message)  # convert the message to dictionary from json
 
             id = message['id'] # get the echo id of the message, to echo back to the server when sending response
 
@@ -263,7 +262,7 @@ try:
                                          stderr=subprocess.STDOUT, shell=True)
                     thread = threading.Thread(target=receive, args=(client, p,))
                     thread.start()
-                    client.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id)))
+                    client.send_message(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
                     while p.poll() is None:
                         n = p.stdout.readline()
                         client.send(n)
@@ -277,7 +276,7 @@ try:
                     sendallfiles(client, directory)
 
                     # send file download end status
-                    client.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value))))
+                    client.send_message(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value)))
 
     def ActualDirectorySize(path, f):
         size = 0
@@ -458,7 +457,7 @@ try:
         # main loop
         # receives and unpacks messages from the server, and checks the type of message
         while process_status:
-            size, message, isEncrypted = s.recv_message()
+            size, message, isEncrypted = s.receive_message()
             if message == -1:
                 return
 
@@ -702,7 +701,7 @@ try:
                                                      last_modified=os.path.getmtime(directory + file),
                                                      size=os.path.getsize(directory + file)))
                             print(f"WinScript Method for {directory}: ", datetime.datetime.now() - ctime)
-                            s.send(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id))
+                            s.send_message(NetMessage(NetTypes.NetDirectoryListing, sMessage, id=id))
 
             # if server sent an id, then set the id to it
             elif message['type'] == NetTypes.NetIdentification.value:
