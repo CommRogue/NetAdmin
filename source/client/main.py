@@ -123,7 +123,7 @@ try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
         return winreg.QueryValue(key, 'UUID')
 
-    def createServer(port=0):
+    def createServer(port=0, eKey=None):
         """
         Creates a server socket and binds it to the specified port. If no port is specified, the socket will be bound to an available port.
 
@@ -133,7 +133,8 @@ try:
         Returns: the server socket.
 
         """
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server = SmartSocket(socket.AF_INET, socket.SOCK_STREAM)
+        server.set_key(eKey)
         server.bind(('0.0.0.0', port))
         server.listen(5)
         return server
@@ -220,14 +221,17 @@ try:
 
 
     @try_connection
-    def handleOpenConnection(server):
+    def handleOpenConnection(server : SmartSocket):
         client, address = server.accept()
         print("OpenConnection from: " + str(address))
 
         # listener loop
         while True:
             # read message
-            size, message = NetProtocol.unpackFromSocket(client)
+            size, message, isEncrypted = client.recv_message()
+            if isEncrypted:
+                print("Decrypted message")
+
             if size == -1:
                 # if server disconnected, close local open connection server
                 server.shutdown(socket.SHUT_RDWR)
@@ -438,8 +442,9 @@ try:
                 client_connection_main(s, computer)
             # if we except because of s.connect, retry connection
             #TODO if we get an error due to other exceptions, do not try to reconnect
-            except Exception as e:
+            except (ConnectionAbortedError, ConnectionResetError, OSError) as e:
                 print(str(e))
+                print("Waiting 5 seconds before trying to reconnect")
                 time.sleep(5)
             # if client_connection_main ends and the try_connection decorator catches the exception, then check the process status and if true, retry connection
             else:
@@ -453,7 +458,7 @@ try:
         # main loop
         # receives and unpacks messages from the server, and checks the type of message
         while process_status:
-            size, message = s.recv_message()
+            size, message, isEncrypted = s.recv_message()
             if message == -1:
                 return
 
@@ -608,7 +613,7 @@ try:
                 # if request to open a new connection
                 elif message['data'] == NetTypes.NetOpenConnection.value:
                     # create a server with the port specified in extra, and pass it to handleOpenConnection
-                    server = createServer()
+                    server = createServer(eKey=s.Fkey)
                     thread = threading.Thread(target=handleOpenConnection, args=(server,))
                     thread.start()
                     s.send_message(
@@ -809,6 +814,9 @@ try:
                 install()
 
 except Exception as e:
-    exc_type, exc_obj, exc_tb = sys.exc_info()
-    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-    logger.info(str(fname) + " " + str(exc_tb.tb_lineno) + " " + str(e))
+    if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):
+        raise Exception
+    else:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        logger.info(str(fname) + " " + str(exc_tb.tb_lineno) + " " + str(e))

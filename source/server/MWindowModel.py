@@ -226,7 +226,7 @@ class Client(QObject):
         self.sConnection_end.emit()
         self._socket.close() #check for problems
 
-    def send_message(self, data : NetMessage, track_event=False):
+    def send_message(self, data : NetMessage, track_event=False, encrypt=True):
         if track_event: #if wants to track the response, then add an id to the message and add it to the response_events dict and return the event
             id = UniqueIDInstance.getId()
             print(f"{id} for {str(data)}")
@@ -235,10 +235,10 @@ class Client(QObject):
             else:
                 raise Exception('Response event already exists')
             data.id = id #send the id to the client so it can copy it
-            self._message_queue.put(self._socket.packMessage(data))
+            self._message_queue.put(self._socket.packMessage(data, encrypt))
             return response_events[id]
         else:
-            self._message_queue.put(self._socket.packMessage(data))
+            self._message_queue.put(self._socket.packMessage(data, encrypt))
 
 class DatabaseHelpers:
     @staticmethod
@@ -350,6 +350,10 @@ class MessageHandler(QRunnable):
                     confirmedId = self.client._confirmedId
                     self.client.dataLock.release_read()
                     if confirmedId:
+                        self.client.dataLock.acquire_write()
+                        self.client._confirmedEncryption = True
+                        self.client.dataLock.release_write()
+
                         self.client.identificationNotification.acquire()
                         self.client.identificationNotification.notify_all()
                         self.client.identificationNotification.release()
@@ -393,14 +397,14 @@ class MessageHandler(QRunnable):
                         self.client.dataLock.acquire_write()
                         self.client._confirmedId = True
                         self.client.dataLock.release_write()
-                        # request client to send hello with encryption
-                        self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetEncryptionVerification))
                         _, _, EKey = DatabaseHelpers.find_client(con, self.client.uuid)
                         self.client.dataLock.acquire_write()
                         # move to encryption
                         d = EKey.encode()
                         self.client._socket.set_key(d)
                         self.client.dataLock.release_write()
+                        # request client to send hello without encryption
+                        self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetEncryptionVerification), encrypt=False)
 
 
                 # if new client wants identification
@@ -594,7 +598,7 @@ class ListenerWorker(QObject):
 
                 #if the socket is a client socket, then read a new message
                 else:
-                    size, message = s.recv_appended_stream()
+                    size, message, isEncrypted = s.recv_appended_stream()
                     # if unpackFromSocket returns -1, then the socket closed, and therefore the client disconnected
                     if size == -1:
                         #remove the socket from the list of sockets, close the socket, and emit a sConnection_end signal.
@@ -606,7 +610,6 @@ class ListenerWorker(QObject):
                     #if unpackFromSocket succeeded, then launch a message handler job
                     elif size != 0:
                         # check if message was encrypted
-                        isEncrypted = s.fernetInstance != None
                         threadPool.start(MessageHandler(clients[s], message, self.controller.sThreadPool_runningTaskCountChanged, isEncrypted))
 
             # every cycle (0.01 seconds), check if there is a message in the message queue of each client

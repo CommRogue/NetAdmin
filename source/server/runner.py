@@ -78,8 +78,8 @@ def background_verify_upnp(finish_signal):
     Args:
         finish_signal: signal to emit when finished.
     """
-    status, err_msg = OpenConnectionHelpers.verify_upnp()
-    finish_signal.emit(status, err_msg)
+    # status, err_msg = OpenConnectionHelpers.verify_upnp()
+    # finish_signal.emit(status, err_msg)
 
 
 def main(verify_upnp=True):

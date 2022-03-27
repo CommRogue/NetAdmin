@@ -1,15 +1,5 @@
-import queue
-
-from PyQt5.QtWidgets import QMessageBox
-
-import DUDialogController
 import OpenConnectionHelpers
-from NetProtocol import *
-import socket
-import NetHelpers
-import os
 from PyQt5.QtCore import pyqtSignal, QObject
-import logging
 from OpenConnectionHelpers import *
 import queue
 
