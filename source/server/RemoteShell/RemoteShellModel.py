@@ -13,10 +13,9 @@ class RemoteShellModel(QObject):
 
     def _start(self, client, status: SharedBoolean, text_signal: pyqtSignal(str)):
         self.sock = open_connection(client)
-        self.sock.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetRequest, NetTypes.NetOpenShell.value)))
+        self.sock.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetOpenShell.value))
         # receive response, and access index 1 to get data and not size
-        size, message = NetProtocol.unpackFromSocket(self.sock)
-        response = orjson.loads(message)  # convert the message to dictionary from json
+        size, response, isEncrypted = self.sock.receive_message()
         if response:
             if response['type'] == NetTypes.NetStatus.value:
                 if response['data']['statusCode'] != NetStatusTypes.NetOK.value:
@@ -25,8 +24,9 @@ class RemoteShellModel(QObject):
         # set timeout to 0.5 seconds, so that the check for status is run every 0.5 seconds, and when the status is false, stop the thread
         while status:
             try:
-                text = self.sock.recv(4016).decode()
-                text_signal.emit(text)
+                size, text, isEncrypted = self.sock.recv_appended_stream()
+                text_signal.emit(text.decode())
+                print("received", isEncrypted, "text")
             except socket.timeout:
                 if not status:
                     break

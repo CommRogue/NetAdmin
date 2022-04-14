@@ -98,12 +98,12 @@ def sendfile(directory, socket : SmartSocket.SmartSocket):
         # read file and send exactly maximum of 16KB at a time.
         # the receiver receives exactly 16KB, or the remainder of the file (which it can calculate using the file size and amount of bytes received)
         # then the receiver decrypts exactly that amount of data
-        buffer = file.read(16384)
+        buffer = file.read(16000)
         while buffer:
             if socket.Fkey:
                 print("Encrypted 16KB chunk or file remainder of data on NetTransferProtocol")
             socket.send_appended_stream(buffer)
-            buffer = file.read(16384)
+            buffer = file.read(16000)
         file.close()
 
 def sendallfiles(socket, dir) -> None:
@@ -247,7 +247,7 @@ def _copy_socket(originalSocket : SmartSocket.SmartSocket):
         key = originalSocket.Fkey
     return SmartSocket.SmartSocket(key, socket.AF_INET, socket.SOCK_STREAM)
 
-def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.SmartSocket]):
+def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.SmartSocket], encrypt=True):
     """
     Opens a new socket to the client or socket passed in.
     Args:
@@ -258,7 +258,7 @@ def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.Smart
     # if passed in MainWindowModel.Client
     if isinstance(client, MWindowModel.Client):
         # send open connection request
-        event = client.send_message(NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value), track_event=True)
+        event = client.send_message(NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value, extra=encrypt), track_event=True)
         # wait for response and get data from it
         event.wait()
         data = event.get_data()
@@ -267,9 +267,11 @@ def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.Smart
         # if response is ok
         if type(data) is NetStatus:
             if data.statusCode == NetStatusTypes.NetOK.value:
-                client.dataLock.acquire_read()
-                Fkey = client._socket.Fkey
-                client.dataLock.release_read()
+                Fkey = None
+                if encrypt:
+                    client.dataLock.acquire_read()
+                    Fkey = client._socket.Fkey
+                    client.dataLock.release_read()
                 # connect to client using new socket
                 ocSocket = SmartSocket.SmartSocket(Fkey, socket.AF_INET, socket.SOCK_STREAM)
                 ocSocket.connect((client.address[0], int(extra)))
@@ -286,7 +288,11 @@ def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.Smart
 
         # if response is ok
         if data == NetStatusTypes.NetOK.value:
+            if encrypt:
+                Fkey = client.Fkey
+            else:
+                Fkey = None
             # connect to client using new socket
-            ocSocket = SmartSocket.SmartSocket(client.Fkey, socket.AF_INET, socket.SOCK_STREAM)
+            ocSocket = SmartSocket.SmartSocket(Fkey, socket.AF_INET, socket.SOCK_STREAM)
             ocSocket.connect((client.getpeername()[0], int(extra)))
             return ocSocket

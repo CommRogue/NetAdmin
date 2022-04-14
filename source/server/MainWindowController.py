@@ -92,8 +92,11 @@ class MainWindowController(QObject):
             checked: qt passed in??
         """
         if self.selection is not None and self.selection.client is not None: #verify that there is a selection and selection is a connected client
-            self.logger.info(f"Inspecting client {self.selection.client.address[0]}")
-            self.createClientInspector(self.selection.client)
+            if self.inspected_clients.get(self.selection.client.uuid) != None:
+                GUIHelpers.infobox("Client already inspected", f"The client {self.selection.client.address} is already being inspected.", self.view)
+            else:
+                self.logger.info(f"Inspecting client {self.selection.client.address[0]}")
+                self.createClientInspector(self.selection.client)
 
     def onClientDelete(self, checked):
         """

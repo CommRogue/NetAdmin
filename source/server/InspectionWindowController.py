@@ -91,6 +91,7 @@ class ClientInspectorController(QObject):
         self.view.connectionInformationTable.initializeClient(client)
         self.infoLock = SocketLock()
         self.active = True
+        self.screenshareActive = False
         self.currentTab = 0
         self.view.TabContainer.currentChanged.connect(self.tabChanged)
         self.view.pushButton_3.clicked.connect(self.remoteDekstopButtonClicked)
@@ -121,8 +122,14 @@ class ClientInspectorController(QObject):
         self.updateMetricsThread.start()
 
     def remoteDekstopButtonClicked(self):
-        worker = threading.Thread(target=ScreenShare.main(self.client))
-        worker.start()
+        def screen_worker(*args):
+            ScreenShare.main(*args)
+            self.screenshareActive = False
+
+        if not self.screenshareActive:
+            self.screenshareActive = True
+            worker = threading.Thread(target=screen_worker(self.client))
+            worker.start()
 
     def close(self):
         """

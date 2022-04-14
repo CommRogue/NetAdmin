@@ -165,7 +165,9 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
             remotedirs = self.fileExplorerItems
             remotedirs = map(lambda x: x.path, remotedirs)
 
-            download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal, self.infobox_signal, self.totalSize))
+            encrypt = self.view.encryptRadio.isChecked()
+
+            download_thread = threading.Thread(target=self.model.download_files, args=(localdir, remotedirs, self.du_progress_signal, self.infobox_signal, self.totalSize, encrypt))
             download_thread.start()
         else:
             GUIHelpers.infobox("Download in progress", "The download is already in progress.")

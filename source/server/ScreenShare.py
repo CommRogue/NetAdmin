@@ -8,6 +8,8 @@ import pygame
 import socket
 from io import BytesIO
 from PIL import Image
+
+import SmartSocket
 from NetProtocol import *
 import OpenConnectionHelpers
 from turbojpeg import TurboJPEG
@@ -27,35 +29,38 @@ def recvall(conn, length):
         buf += data
     return buf
 
-def handleReceive(queue, conn, remote_resolution, pygame_resolution):
+def handleReceive(queue, conn : SmartSocket.SmartSocket, remote_resolution, pygame_resolution):
     i = 0
     cSumData = 0
     while True:
-        try:
-            if i == 60:
-                logging.info(f"[SCREENSHARE] 60 FPS in {cSumData/1000000}MB")
-                cSumData = 0
-                i = 0
-            size = conn.recv(4)
-            size = int.from_bytes(size, byteorder='big')
-            cSumData += size
-            pixels = recvall(conn, size)
+        if i == 60:
+            logging.info(f"[SCREENSHARE] 60 FPS in {cSumData/1000000}MB")
+            cSumData = 0
+            i = 0
+        size, pixels, isEncrypted = conn.recv_appended_stream()
+        if pixels == -1:
+            break
+        print("FRAME ENCRYPTION STATUS:", isEncrypted)
+        cSumData += size
+        # TODO - Debug cause of premature JPEG?
+        # check if pixels end in \xff\xd9 (end of jpeg)
+        if pixels[-2:] == b"\xff\xd9":
             pixels = jpeg.decode(pixels)
             img = pygame.image.frombuffer(pixels, remote_resolution, 'RGB')
             img = pygame.transform.smoothscale(img, pygame_resolution)
             queue.put(img)
             i += 1
-        except:
-            return
+        else:
+            logging.info("[SCREENSHARE] PREMATURE JPEG DETECTED")
+
 
 def main(client):
     # request open connection
-    conn = OpenConnectionHelpers.open_connection(client)
+    conn = OpenConnectionHelpers.open_connection(client, encrypt=False)
     # send pygame_resolution to tell client capture size
-    conn.send(NetProtocol.packNetMessage(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetRemoteControl)))
+    conn.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetRemoteControl))
     # load response
-    size, data = NetProtocol.unpackFromSocket(conn)
-    response = orjson.loads(data)
+    size, response, isEncrypted = conn.receive_message()
 
     if response['type'] == NetTypes.NetStatus.value:
         if response['data'] == NetStatusTypes.NetOK.value:

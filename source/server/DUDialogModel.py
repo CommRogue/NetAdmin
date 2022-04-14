@@ -17,7 +17,7 @@ class DUDialogModel(QObject):
         if self.status_queue is not None:
             self.status_queue.put("cancel")
 
-    def download_files(self, localdir, remotedirs, download_progress_signal : pyqtSignal, infobox_signal : pyqtSignal, totalSize):
+    def download_files(self, localdir, remotedirs, download_progress_signal : pyqtSignal, infobox_signal : pyqtSignal, totalSize, encrypt=True):
         """
         Download a file from the client to an existing local directory.
         Implementation summary:
@@ -36,7 +36,7 @@ class DUDialogModel(QObject):
         # request a new socket from client
         print(f"Thread of download_files name: {threading.current_thread().name}")
         cancelled = False
-        socket = OpenConnectionHelpers.open_connection(self.client)
+        socket = OpenConnectionHelpers.open_connection(self.client, encrypt)
         excludedCount = 0
         pathlist = []
         for remotedir in remotedirs:
@@ -64,7 +64,7 @@ class DUDialogModel(QObject):
             infobox_signal.emit("Excluded files in download request", f"{excludedCount} directories were excluded due to permission errors.")
 
         # close socket
-        socket.send(NetProtocol.packNetMessage(NetMessage(NetTypes.NetRequest, NetTypes.NetCloseConnection)))
+        socket.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetCloseConnection))
         socket.close()
         # return number of files excluded
         return excludedCount

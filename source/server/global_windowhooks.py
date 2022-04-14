@@ -15,7 +15,7 @@ def init(model, controller):
 
 def threadCount():
     # print number of threads running in a loop
-    pass
+    return
     while RUNNING:
         logging.debug("Active Threads: " + str(threading.active_count()))
         logging.debug("Threads: " + str(list(map(lambda x: x.name, threading.enumerate()))))
