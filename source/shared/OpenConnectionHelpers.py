@@ -7,7 +7,8 @@ from NetProtocol import *
 import os
 import threading
 import upnpclient
-from NetProtocol import NetMessage, NetTypes, NetStatus, NetStatusTypes, NetProtocol
+from NetProtocol import NetMessage, NetTypes, NetStatus, NetStatusTypes
+
 
 class SharedBoolean:
     def __init__(self, init_value):

@@ -1,15 +1,12 @@
 import argparse
 import base64
 import configparser
-import logging
-import os
 import shutil
 import time
 import cv2
 import keyboard
 import mss
 import numpy
-import sys
 import platform
 import pyperclip
 import pyautogui
@@ -19,7 +16,6 @@ import wmi
 import psutil
 import GPUtil
 import winreg
-import NetProtocol
 import win32api
 from os import listdir
 from os.path import isfile, join

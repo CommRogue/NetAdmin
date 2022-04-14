@@ -15,7 +15,6 @@ import functools
 from time import sleep
 import SocketLock
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery
-import upnpclient
 import uuid
 import UniqueID
 sys.path.insert(1, os.path.join(sys.path[0], '../shared'))

@@ -1,13 +1,8 @@
 import ast
 import ctypes
-import logging
 import queue
 import threading
-from zlib import decompress
 import pygame
-import socket
-from io import BytesIO
-from PIL import Image
 
 import SmartSocket
 from NetProtocol import *
