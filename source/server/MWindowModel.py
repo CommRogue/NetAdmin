@@ -42,6 +42,8 @@ response_events = {}
 
 clients = {}
 
+listener_event_queue = queue.Queue()
+
 temp_identifiers = {}
 
 logging.basicConfig(format=bcolors.WARNING + '%(asctime)s - %(threadName)s - %(levelname)s:' + bcolors.OKGREEN + '    %(message)s' + bcolors.END, level=logging.DEBUG)
@@ -124,8 +126,9 @@ class DataEvent(threading.Event):
     so that it can be accessed by the thread that is waiting on the event to finish.
     '''
 
-    def __init__(self):
+    def __init__(self, owner):
         super().__init__()
+        self.owner = owner
         self.data = None
         self.extra = None
 
@@ -178,6 +181,8 @@ class Client(QObject):
     _confirmedId = False
     _confirmedEncryption = False
 
+    # openconnections
+    open_connections = {} # {'openconnection_uuid': socket/None}
 
     # Signals
     # ---------------
@@ -230,7 +235,7 @@ class Client(QObject):
             id = UniqueIDInstance.getId()
             print(f"{id} for {str(data)}")
             if id not in response_events.keys():
-                response_events[id] = DataEvent()
+                response_events[id] = DataEvent(self)
             else:
                 raise Exception('Response event already exists')
             data.id = id #send the id to the client so it can copy it
@@ -336,8 +341,6 @@ class MessageHandler(QRunnable):
         isVerified = (self.client._confirmedId and self.client._confirmedEncryption)
         self.client.dataLock.release_read()
 
-
-
         if not isVerified:
             # if related to encryption
             if self.message["type"] == NetTypes.NetEncryptionVerification.value:
@@ -345,17 +348,9 @@ class MessageHandler(QRunnable):
                 if self.isEncrypted:
                     # check if client confirmed its id
                     logging.debug(f"received encrypted message")
-                    self.client.dataLock.acquire_read()
-                    confirmedId = self.client._confirmedId
-                    self.client.dataLock.release_read()
-                    if confirmedId:
-                        self.client.dataLock.acquire_write()
-                        self.client._confirmedEncryption = True
-                        self.client.dataLock.release_write()
-
-                        self.client.identificationNotification.acquire()
-                        self.client.identificationNotification.notify_all()
-                        self.client.identificationNotification.release()
+                    self.client.dataLock.acquire_write()
+                    self.client._confirmedEncryption = True
+                    self.client.dataLock.release_write()
 
             # if related to identification
             elif self.message["type"] == NetTypes.NetIdentification.value:  # check if client sent ID or else send ID
@@ -421,6 +416,16 @@ class MessageHandler(QRunnable):
                     temp_identifiers[cid] = (self.client, fernetKey)
                     self.client.send_message(
                         NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification))  # request to identify again
+
+            # reevaluate if client is authenticated
+            self.client.dataLock.acquire_read()
+            isVerified = (self.client._confirmedId and self.client._confirmedEncryption)
+            self.client.dataLock.release_read()
+
+            if isVerified:
+                self.client.identificationNotification.acquire()
+                self.client.identificationNotification.notify_all()
+                self.client.identificationNotification.release()
 
         else:
             if self.message["type"] == NetTypes.NetRequest:
@@ -508,7 +513,6 @@ class ClientConnectionHandler(QRunnable):
         After the identification, the function resolves the IP and gets the GEOInfo data of the IP, and updates the client instance with it.
         Lastly, the function emits a sConnection_start signal.
         '''
-
         logging.debug(f"ClientConnectionHandler running with client {self.client.address}")
         self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetIdentification))
         self.client.identificationNotification.acquire()
@@ -541,15 +545,51 @@ class ClientConnectionHandler(QRunnable):
         self.client.dataLock.release_write()
         self.client.sConnection_start.emit() #emit signal to update UI
 
-LISTENER_RUNNING = True
-
 from SmartSocket import SmartSocket
+
+class NewOpenConnectionHandler(QRunnable):
+    '''
+    Job to handle a client connection.
+    '''
+    def __init__(self, socket: SmartSocket, threadPoolTaskEvent : pyqtSignal):
+        super().__init__()
+        self.socket = socket
+        self.event = threadPoolTaskEvent
+
+    @threadpool_job_tracker("event")
+    def run(self) -> None:
+        '''
+        Summary:
+            Request an OpenConnectionIdentification from the connection.
+            Reply contains the data_event uuid.
+            Wake up the data_event with the socket in its data field.
+        '''
+        logging.debug(f"NewOpenConnectionHandler running with socket {self.socket.getsockname()}")
+        _, response, isEncrypted = self.socket.receive_message()
+        if response['type'] == NetTypes.NetStatus.value:
+            uuid = response['id']
+            event = response_events[uuid]
+            if event.owner._socket.getsockname()[0] == self.socket.getsockname()[0]: # security check to see if the openconnection is from the same IP as the requester
+                # now verify that the connector can send the UUID encrypted (in order to verify identity)
+                if event.owner._socket.fernetInstance is not None:
+                    _, response2, _ = self.socket.recv_appended_stream()
+                    response2 = event.owner._socket.fernetInstance.decrypt(response2)
+                    response2 = orjson.loads(response2)
+                    if response2['type'] == NetTypes.NetStatus.value:
+                        uuid2 = response['id']
+                        if uuid == uuid2:
+                            event.set_data(self.socket)
+                            event.set()
+
+
+LISTENER_RUNNING = True
 
 class ListenerWorker(QObject):
     '''
     The main communicator thread. Handles the sockets by selecting the active socket descriptors in a background-running loop.
     '''
     global clients
+    global listener_event_queue
     sockets = []
     # message_queues = {}
 
@@ -579,8 +619,12 @@ class ListenerWorker(QObject):
         self.listener_socket.bind((socket.gethostbyname("0.0.0.0"), 49152))
         self.listener_socket.listen(5)
 
+        self.openconnection_listener_socket = SmartSocket(None, socket.AF_INET, socket.SOCK_STREAM)
+        self.openconnection_listener_socket.bind((socket.gethostbyname("0.0.0.0"), 49153))
+        self.openconnection_listener_socket.listen(5)
+
         while LISTENER_RUNNING:
-            readable, writable, exceptional = select.select([self.listener_socket] + self.sockets, self.sockets, [])
+            readable, writable, exceptional = select.select([self.listener_socket, self.openconnection_listener_socket] + self.sockets, self.sockets, [])
 
             #if socket can be read, either a new connection or a new message from a client
             for s in readable:
@@ -594,6 +638,12 @@ class ListenerWorker(QObject):
                     self.connectSignals(connection) #connect signals from the client to the controller
                     logging.debug(f"{clients[connection].address} connected")
                     threadPool.start(ClientConnectionHandler(clients[connection], self.controller.sThreadPool_runningTaskCountChanged))
+
+                elif s is self.openconnection_listener_socket:
+                    # new OpenConnection
+                    connection, client_address = s.accept()
+                    logging.debug(f"{client_address} new OpenConnection")
+                    threadPool.start(NewOpenConnectionHandler(connection, self.controller.sThreadPool_runningTaskCountChanged))
 
                 #if the socket is a client socket, then read a new message
                 else:

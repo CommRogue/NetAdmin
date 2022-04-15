@@ -220,12 +220,8 @@ try:
 
 
     @try_connection
-    def handleOpenConnection(server : SmartSocket):
-        client, address = server.accept()
-        # if server has Fkey that means that encryption is enabled. otherwise encryption is disabled and therefore we don't se an encryption key.
-        if server.Fkey:
-            client.set_key(server.Fkey)
-        print("OpenConnection from: " + str(address))
+    def handleOpenConnection(client : SmartSocket):
+        print("OpenConnection from: " + str(client.getsockname()))
 
         # listener loop
         while True:
@@ -236,7 +232,7 @@ try:
 
             if size == -1:
                 # if server disconnected, close local open connection server
-                server.shutdown(socket.SHUT_RDWR)
+                client.close()
                 break
 
             id = message['id'] # get the echo id of the message, to echo back to the server when sending response
@@ -245,12 +241,12 @@ try:
             if message['type'] == NetTypes.NetRequest.value:
                 # if the request is to close the connection
                 if message['data'] == NetTypes.NetCloseConnection.value:
-                    print(f"Closing unmanaged connection {address}")
-                    server.close()
+                    print(f"Closing unmanaged connection {str(client.getsockname())}")
+                    client.close()
                     break
 
                 elif message['data'] == NetTypes.NetRemoteControl.value:
-                    print(f"Remote control request from {address}")
+                    print(f"Remote control request from {str(client.getsockname())}")
                     # open screenshare
                     p = threading.Thread(target=screenShareClient, args=(client, id))
                     p.start()
@@ -619,12 +615,14 @@ try:
                         Fkey = s.Fkey
                     else:
                         Fkey = None
-                    server = createServer(eKey=Fkey)
-                    thread = threading.Thread(target=handleOpenConnection, args=(server,))
+                    sock = SmartSocket(None, socket.AF_INET, socket.SOCK_STREAM)
+                    sock.connect((s.getsockname()[0], 49153))
+                    sock.send_message(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value), id=id))
+                    sock.send_appended_stream(s.fernetInstance.encrypt(orjson.dumps(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value), id=id))))
+                    if Fkey:
+                        sock.set_key(Fkey)
+                    thread = threading.Thread(target=handleOpenConnection, args=(sock,))
                     thread.start()
-                    s.send_message(
-                        NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value),
-                                   extra=server.getsockname()[1], id=id))
 
                 # # if request actual folder size
                 # elif message['data'] == NetTypes.NetDirectorySize.value:

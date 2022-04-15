@@ -34,7 +34,7 @@ def verify_dir(dir):
         return False
     return True
 
-def verify_upnp(port=49152):
+def verify_upnp(ports=(49152, 49153)):
     '''
     Uses the forward_upnp function to forward the specified port, while handling exceptions and returning the result and an optional error message that the caller can display to the user if needed.
     Args:
@@ -43,10 +43,11 @@ def verify_upnp(port=49152):
     Returns:
         True if the port was forwarded on at least one UPnP device, False otherwise.
     '''
-    res = False
+    res = True
     err_msg = None
     try:
-        res = forward_upnp(port)
+        for port in ports:
+            res = res & forward_upnp(port)
     except Exception as e:
         err_msg = "NetAdmin encountered the following error while trying to forward port 49152 via UPnP: \n"+str(e)
     else:
@@ -54,7 +55,7 @@ def verify_upnp(port=49152):
             err_msg = "NetAdmin could not find any compatible UPnP devices to port-forward your connection. If you would like computers outside of your network to connect to this application, either enable UPnP on your router, or manually set up port-forwarding on port 49152 on your router."
     return res, err_msg
 
-def forward_upnp(port=49152):
+def forward_upnp(port):
     """
     Forwards the specified port to all available UPnP devices that support the AddPortMapping action in the WANIPConn1 service.
     Args:
@@ -263,37 +264,46 @@ def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.Smart
         # wait for response and get data from it
         event.wait()
         data = event.get_data()
-        extra = event.get_extra()
 
-        # if response is ok
-        if type(data) is NetStatus:
-            if data.statusCode == NetStatusTypes.NetOK.value:
-                Fkey = None
-                if encrypt:
-                    client.dataLock.acquire_read()
-                    Fkey = client._socket.Fkey
-                    client.dataLock.release_read()
-                # connect to client using new socket
-                ocSocket = SmartSocket.SmartSocket(Fkey, socket.AF_INET, socket.SOCK_STREAM)
-                ocSocket.connect((client.address[0], int(extra)))
-                return ocSocket
+        if type(data) is SmartSocket.SmartSocket:
+            if encrypt:
+                client.dataLock.acquire_read()
+                Fkey = client._socket.Fkey
+                client.dataLock.release_read()
+                data.set_key(Fkey) # throws exception if Fkey does not exist, which is good because we want to guarantee encryption
+            return data
+
+        # # if response is ok
+        # if type(data) is NetStatus:
+        #     if data.statusCode == NetStatusTypes.NetOK.value:
+        #         Fkey = None
+        #         if encrypt:
+        #             client.dataLock.acquire_read()
+        #             Fkey = client._socket.Fkey
+        #             client.dataLock.release_read()
+        #         # connect to client using new socket
+        #         ocSocket = SmartSocket.SmartSocket(Fkey, socket.AF_INET, socket.SOCK_STREAM)
+        #         ocSocket.connect((client.address[0], int(extra)))
+        #         return ocSocket
 
     if isinstance(client, SmartSocket.SmartSocket):
-        # send open connection request
-        client.send_message((NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value)))
-
-        # wait for response and get data from it
-        size, message, isEncrypted = client.receive_message()
-        data = message["data"]
-        extra = message["extra"]
-
-        # if response is ok
-        if data == NetStatusTypes.NetOK.value:
-            if encrypt:
-                Fkey = client.Fkey
-            else:
-                Fkey = None
-            # connect to client using new socket
-            ocSocket = SmartSocket.SmartSocket(Fkey, socket.AF_INET, socket.SOCK_STREAM)
-            ocSocket.connect((client.getpeername()[0], int(extra)))
-            return ocSocket
+        # TODO: check what to do if receiving SmartSocket, this is outdated code
+        raise Exception("open_connection() received SmartSocket object instead of MainWindowModel.Client object.")
+        # # send open connection request
+        # client.send_message((NetMessage(NetTypes.NetRequest.value, NetTypes.NetOpenConnection.value)))
+        #
+        # # wait for response and get data from it
+        # size, message, isEncrypted = client.receive_message()
+        # data = message["data"]
+        # extra = message["extra"]
+        #
+        # # if response is ok
+        # if data == NetStatusTypes.NetOK.value:
+        #     if encrypt:
+        #         Fkey = client.Fkey
+        #     else:
+        #         Fkey = None
+        #     # connect to client using new socket
+        #     ocSocket = SmartSocket.SmartSocket(Fkey, socket.AF_INET, socket.SOCK_STREAM)
+        #     ocSocket.connect((client.getpeername()[0], int(extra)))
+        #     return ocSocket
