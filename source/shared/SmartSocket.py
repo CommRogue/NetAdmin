@@ -108,12 +108,12 @@ class SmartSocket(socket.socket):
         Returns: the decrypted data, and a boolean specifying whether the data was encrypted.
         """
         received = b''
-        receivedC = 0
-        while receivedC < bytes:
-            received += super().recv(bytes - receivedC, *args, **kwargs)
-            if len(received) == 0:
+        while len(received) < bytes:
+            temp = super().recv(bytes - len(received), *args, **kwargs)
+            if len(temp) == 0:
                 raise ConnectionResetError("recv_exact failed due to socket closing")
-            receivedC += len(received)
+            received += temp
+        assert len(received) == bytes
         if self.fernetInstance and decrypt_if_available:
             return self.fernetInstance.decrypt(received), True
         else:
