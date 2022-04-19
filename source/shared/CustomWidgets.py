@@ -18,9 +18,10 @@ class UPnPVerify(QWidget):
         self.verifyButton.clicked.connect(self.verify)
         self.setVerifiedView(MWindowModel.UPNP_STATUS)
 
-    def verify(self):
+    @staticmethod
+    def verify_upnp_with_messagebox():
         """
-        Verify UPnP is enabled.
+        Calls verify_upnp() along with a messagebox alerting the user of it.
         """
         msgbox = GUIHelpers.getinfobox("Port Forwarding", "Port Forwarding.... This may take some time....")
         msgbox.show()
@@ -28,11 +29,19 @@ class UPnPVerify(QWidget):
         QApplication.instance().processEvents()
 
         upnp_status, err = OpenConnectionHelpers.verify_upnp()
+        if not upnp_status:
+            GUIHelpers.infobox("UPnP Port Forwarding Error", err)
+        return upnp_status, err
+
+    def verify(self):
+        """
+        Verify UPnP is enabled.
+        """
+        upnp_status, err = self.verify_upnp_with_messagebox()
         if upnp_status:
             self.setVerifiedView(True)
         else:
             self.setVerifiedView(False)
-            GUIHelpers.infobox("UPnP Port Forwarding Error", err)
 
     def setVerifiedView(self, state):
         if state:

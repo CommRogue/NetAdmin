@@ -6,6 +6,7 @@
     <file>images/refresh-2-64 (1).ico</file>
     <file alias="deleteIcon">images/delete.png</file>
     <file alias="openIcon">images/open.png</file>
+    <file alias="refreshIcon">images/refresh.png</file>
     <file alias="flag-AD">images/flags/AD.png</file>
     <file alias="flag-AE">images/flags/AE.png</file>
     <file alias="flag-AF">images/flags/AF.png</file>

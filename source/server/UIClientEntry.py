@@ -29,6 +29,7 @@ class UIClientEntry:
     def setDisconnected(self):
         self.client = None
         self._status_field.setText("Disconnected")
+        self._latency_field.setText("N/A")
 
     def setStatus(self, status):
         row = self._status_field.row()
@@ -56,7 +57,7 @@ class UIClientEntry:
 
     def setLatency(self, latency):
         row = self._latency_field.row()
-        newLatency = QTableWidgetItem(latency)
+        newLatency = QTableWidgetItem(str(round(latency, 2))+"ms")
         self.table.setItem(row, 4, newLatency)
         self._latency_field = newLatency
 

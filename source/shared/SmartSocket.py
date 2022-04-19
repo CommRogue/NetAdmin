@@ -46,7 +46,8 @@ class SmartSocket(socket.socket):
             size = self.receive_size()
             res = self.recv_exact(size, True)
             return size, orjson.loads(res[0]), res[1]
-        except (ConnectionError, struct.error):
+        except (ConnectionError, struct.error) as E:
+            print(E)
             return -1, -1, -1
 
     def send_message(self, data : NetMessage):
@@ -111,7 +112,7 @@ class SmartSocket(socket.socket):
         while len(received) < bytes:
             temp = super().recv(bytes - len(received), *args, **kwargs)
             if len(temp) == 0:
-                raise ConnectionResetError("recv_exact failed due to socket closing")
+                raise ConnectionResetError(f"recv_exact({bytes, decrypt_if_available}) failed due to socket closing")
             received += temp
         assert len(received) == bytes
         if self.fernetInstance and decrypt_if_available:

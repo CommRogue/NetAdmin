@@ -6,7 +6,7 @@ import json
 from urllib.request import urlopen
 import threading
 import socket
-
+import time
 import fernet
 import select
 import queue
@@ -42,7 +42,7 @@ response_events = {}
 
 clients = {}
 
-listener_event_queue = queue.Queue()
+listener_removal_queue = queue.Queue()
 
 temp_identifiers = {}
 
@@ -169,11 +169,14 @@ class Client(QObject):
     systemInformation = None
     systemMetrics = None
     geoInformation = None
+    latency = None
 
-    # datalock
+    # datalocks
+    # -----------------------
     dataLock = None
 
     # message_queue
+    # -----------------------
     _message_queue = None
 
     # authentication segments
@@ -182,7 +185,13 @@ class Client(QObject):
     _confirmedEncryption = False
 
     # openconnections
+    # -----------------------
     open_connections = {} # {'openconnection_uuid': socket/None}
+
+    # heartbeat - set to true until the heartbeat thread sets it to false
+    # -----------------------
+    _heartbeat = True
+    _lastResetHearbeat = None
 
     # Signals
     # ---------------
@@ -198,7 +207,7 @@ class Client(QObject):
     #toString function
     def __str__(self):
         """
-        get the formatted address of the client as a string.
+        Get the formatted address of the client as a string.
         Returns: formatted address of the client.
 
         """
@@ -223,12 +232,14 @@ class Client(QObject):
         # queue for storing messages to be sent to the client by the select.select loop
         self._message_queue = queue.Queue()
 
-    def close(self):
-        """
-        closes the client and emits a connection_end signal.
-        """
-        self.sConnection_end.emit()
-        self._socket.close() #check for problems
+    def disconnect(self):
+        '''
+        Disconnects the client.
+        Implementation: puts the socket in the removal queue of the listener, so when the listener
+        thread goes over the queue, it will remove the socket from its select statement, close the socket,
+        and emit sConnectionEnd.
+        '''
+        listener_removal_queue.put(self._socket)
 
     def send_message(self, data : NetMessage, track_event=False, encrypt=True):
         if track_event: #if wants to track the response, then add an id to the message and add it to the response_events dict and return the event
@@ -248,7 +259,7 @@ class DatabaseHelpers:
     @staticmethod
     def open_database(path):
         """
-        opens the database connection to the database at the given path.
+        Opens the database connection to the database at the given path.
         Args:
             path: the path to the database
 
@@ -265,7 +276,7 @@ class DatabaseHelpers:
     @staticmethod
     def find_client(database : QSqlDatabase, uuid : str):
         """
-        finds a client in the database specified with the specified uuid.
+        Finds a client in the database specified with the specified uuid.
         Args:
             uuid: the client's uuid to search for.
 
@@ -279,16 +290,6 @@ class DatabaseHelpers:
             return (findClients.value(1), findClients.value(0), findClients.value(2))
         else:
             return None
-
-        # ---- suggested autopilot code ---- (consider using this)
-        # query = QSqlQuery(database)
-        # query.prepare("SELECT uuid, address FROM clients WHERE uuid = (:uuid)")
-        # query.bindValue(":uuid", uuid)
-        # query.exec_()
-        # if query.next():
-        #     return Client(uuid=uuid)
-        # else:
-        #     return None
 
     @staticmethod
     def insert_client(database : QSqlDatabase, uuid : str, address : str, ekey : str):
@@ -308,7 +309,6 @@ class MessageHandler(QRunnable):
     """
     A job that handles a message sent to it by the communicator thread.
     """
-
     # qt signal for signaling that the task is started/finished to control the status bar task count
 
     def __init__(self, client: Client, message: bytes, taskCountEvent : pyqtSignal, isEncrypted):
@@ -336,6 +336,15 @@ class MessageHandler(QRunnable):
 
 
         # --- start of message handling ---
+
+        # check if client send heartbeat
+        if self.message["type"] == NetTypes.NetHeartbeat.value:
+            now = time.time()
+            self.client.dataLock.acquire_write()
+            self.client._heartbeat = True
+            self.client.latency = 1000*(now-self.client._lastResetHearbeat)
+            self.client.dataLock.release_write()
+            return
 
         self.client.dataLock.acquire_read()
         isVerified = (self.client._confirmedId and self.client._confirmedEncryption)
@@ -489,6 +498,7 @@ class MessageHandler(QRunnable):
             if self.message["id"] is not None and self.message["id"] in response_events: #check is message has response id and if it has an event associated with it
                 UniqueIDInstance.releaseId(self.message["id"]) #release the id from the id pool
                 # print(f"Response events before: {response_events}")
+                # TODO - what if client sent eventAttachedData but it is not linked to any response events?
                 if eventAttachedData is not None: #if there is data to attach to the event
                     response_events[self.message["id"]].set_data(eventAttachedData, self.message["extra"])
                 response_events[self.message["id"]].set() #set the event to notify the waiting thread
@@ -525,6 +535,7 @@ class ClientConnectionHandler(QRunnable):
         if not result:
             logging.warning(f"ClientConnectionHandler did not receive a response to the identification request it sent to {self.client.address[0]}...")
             #TODO remove the client from the global list?
+            self.client.disconnect()
             return
 
         #if the client identified, resolve the client's IP address
@@ -589,8 +600,9 @@ class ListenerWorker(QObject):
     The main communicator thread. Handles the sockets by selecting the active socket descriptors in a background-running loop.
     '''
     global clients
-    global listener_event_queue
+    global listener_removal_queue
     sockets = []
+    latencySignal = pyqtSignal(object)
     # message_queues = {}
 
     def __init__(self, controller):
@@ -599,7 +611,7 @@ class ListenerWorker(QObject):
 
     def connectSignals(self, connection : socket):
         """
-        Connects the client's signals to the corresnponding slots in the controller.
+        Connects the client's signals to the corresponding slots in the controller.
         Args:
             connection: the client's socket.
         """
@@ -608,7 +620,35 @@ class ListenerWorker(QObject):
         clients[connection].sConnection_end.connect(functools.partial(self.controller.on_Connection_end, clients[connection]))
         clients[connection].sConnection_start.connect(functools.partial(self.controller.on_Connection_start, clients[connection]))
 
+    def heartbeat(self):
+        while True:
+            cls = clients.values()
+            for client in cls:
+                client.dataLock.acquire_write()
+                client._heartbeat = False
+                client._lastResetHearbeat = time.time()
+                client.dataLock.release_write()
+                client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetHeartbeat))
+            time.sleep(2)
+            latencies = {}
+            for client in cls:
+                client.dataLock.acquire_read()
+                cHearbeat = client._heartbeat
+                cLatency = client.latency
+                cUUID = client.uuid
+                client.dataLock.release_read()
+                if cHearbeat == False:
+                    client.disconnect()
+                else:
+                    if cLatency is not None:
+                        latencies[cUUID] = cLatency
+            self.latencySignal.emit(latencies)
+
     def run(self):
+        self.latencySignal.connect(self.controller.on_Latency_updates)
+        heartbeatThread = threading.Thread(target=self.heartbeat)
+        heartbeatThread.start()
+
         #model
         #listener checks for socket descriptor readability and writability
         #readability - if listener socket, accept new connection, otherwise recv and launch message handler on thread pool
@@ -625,6 +665,13 @@ class ListenerWorker(QObject):
 
         while LISTENER_RUNNING:
             readable, writable, exceptional = select.select([self.listener_socket, self.openconnection_listener_socket] + self.sockets, self.sockets, [])
+            while not listener_removal_queue.empty():
+                s = listener_removal_queue.get()
+                if s in clients:
+                    cl = clients.pop(s)
+                    self.sockets.remove(s)
+                    s.close()
+                    cl.sConnection_end.emit()
 
             #if socket can be read, either a new connection or a new message from a client
             for s in readable:
@@ -652,6 +699,7 @@ class ListenerWorker(QObject):
                     if size == -1:
                         #remove the socket from the list of sockets, close the socket, and emit a sConnection_end signal.
                         logging.debug(f"{clients[s].address} disconnected")
+                        # TODO - also close all open_connection sockets when client disconnects
                         self.sockets.remove(s)
                         cl = clients.pop(s)
                         s.close()
@@ -685,53 +733,3 @@ class MainWindowModel(QObject): #fix main window closing and not client inspecti
         self.worker.moveToThread(self.communicator)
         self.communicator.started.connect(self.worker.run)
         self.communicator.start()
-
-    def socket_listen(self):
-        pass
-
-    def checkInstallation(self):
-        pass
-
-    def install(self):
-        pass
-
-#acquire and release client.socket_lock
-    # def persist_connection(func):
-    #     def wrapper(self, *args, **kwargs):
-    #         try:
-    #             self.client.socket_lock.acquire()
-    #             return func(self, *args, **kwargs)
-    #         except socket.error as e:
-    #             if self.client.socket in clients:
-    #                 c = clients.pop(self.socket)
-    #                 print(f"Client {c} error: {str(e)}")
-    #                 c.close()
-    #         finally:
-    #             self.client.socket_lock.release()
-    #     return wrapper
-
-#class GetSystemInfo(QRunnable):
-#     def __init__(self, client: Client):
-#         super().__init__()
-#         self.client = client
-#
-#     @Client.persist_connection
-#     def run(self) -> None:
-#         # self.client.send_data(NetProtocol.heartbeat())
-#         self.client.send_text("info")
-#         response = self.client.read_text()
-#         if response == "heartbeat":
-#             print("heartbeat from ", self.client.address)
-#
-# class Heartbeat(QRunnable):
-#     def __init__(self, client: Client):
-#         super().__init__()
-#         self.client = client
-#
-#     @Client.persist_connection
-#     def run(self) -> None:
-#         # self.client.send_data(NetProtocol.heartbeat())
-#         self.client.send_text("heartbeat")
-#         response = self.client.read_text()
-#         if response == "heartbeat":
-#             print("heartbeat from ", self.client.address)

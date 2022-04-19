@@ -2,6 +2,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
+
+import CustomWidgets
+import OpenConnectionHelpers
 from CreatorDialog import CreatorDialog
 import qrc_resources
 import global_windowhooks
@@ -19,7 +22,9 @@ class MainWindow(QMainWindow):
         self.TopToolBar = QToolBar("Actions", self)
         self.ToolBarOpenAction = QAction(QIcon(":openIcon"), "", self.TopToolBar)
         self.ToolBarDeleteAction = QAction(QIcon(":deleteIcon"), "", self.TopToolBar)
+        self.ToolBarRefreshConnectionAction = QAction(QIcon(":refreshIcon"), "", self.TopToolBar)
         self.TopToolBar.addAction(self.ToolBarOpenAction)
+        self.TopToolBar.addAction(self.ToolBarRefreshConnectionAction)
         self.TopToolBar.addAction(self.ToolBarDeleteAction)
         self.addToolBar(self.TopToolBar)
         self.statusBar = self.statusBar()
@@ -60,13 +65,16 @@ class MainWindow(QMainWindow):
 
     def init_menu(self):
         self._menuBar = QMenuBar(self)
-        subMenu = self._menuBar.addMenu("File")
+        self._menuBar.addMenu("File")
+        self._menuBar.addMenu("Options")
+        gensubMenu = self._menuBar.addMenu("Generate")
+        self.clientCreatorMenuAction = gensubMenu.addAction("Generate Client Payload...")
+        netsubMenu = self._menuBar.addMenu("Network Configuration")
+        self.viewConnectionStateAction = netsubMenu.addAction("View connection state...")
+        self.enableUPNPAction = netsubMenu.addAction("Reset/Re-enable UPnP...")
 
-        subMenu = self._menuBar.addMenu("Options")
-
-        subMenu = self._menuBar.addMenu("Generate")
-        self.clientCreatorMenuAction = subMenu.addAction("Generate Client Payload...")
         self.clientCreatorMenuAction.triggered.connect(self.clientCreatorMenuAction_clicked)
+        self.enableUPNPAction.triggered.connect(CustomWidgets.UPnPVerify.verify_upnp_with_messagebox)
         self.setMenuBar(self._menuBar)
 
     def clientCreatorMenuAction_clicked(self):

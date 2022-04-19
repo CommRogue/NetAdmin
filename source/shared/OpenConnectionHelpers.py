@@ -53,6 +53,8 @@ def verify_upnp(ports=(49152, 49153)):
     else:
         if not res:
             err_msg = "NetAdmin could not find any compatible UPnP devices to port-forward your connection. If you would like computers outside of your network to connect to this application, either enable UPnP on your router, or manually set up port-forwarding on port 49152 on your router."
+    # set the upnp status in MainWindowModel to the updated status (for any UPnPVerify widgets to get the status when initializing)
+    MWindowModel.UPNP_STATUS = res
     return res, err_msg
 
 def forward_upnp(port):

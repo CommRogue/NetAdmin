@@ -35,6 +35,8 @@ class NetTypes(Enum):
     NetGetClipboard = 23
     NetText = 24
     NetEncryptionVerification = 25
+    NetHeartbeat = 26
+    NetUninstallClient = 27
 
 class NetStatusTypes(Enum):
     NetOK = 0

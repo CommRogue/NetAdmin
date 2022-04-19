@@ -21,6 +21,7 @@ class MainWindowController(QObject):
         self.sUpnp_status.connect(self.onUpnpStatus)
         self.view.ClientTable.cellClicked.connect(self.onSelection)
         self.view.ToolBarOpenAction.triggered.connect(self.onClientInspect)
+        self.view.ToolBarRefreshConnectionAction.triggered.connect(self.onClientRefresh)
         self.view.ToolBarDeleteAction.triggered.connect(self.onClientDelete)
         self.logger = logging.getLogger()
 
@@ -43,8 +44,6 @@ class MainWindowController(QObject):
             msgBox = GUIHelpers.getinfobox("UPnP Port Forwarding Error", err, self.view)
             msgBox.show()
             self.view.statusBar.showMessage("UPnP port forwarding failed!")
-        # set the upnp status in MainWindowModel to the updated status (for any UPnPVerify widgets to get the status when initializing)
-        MWindowModel.UPNP_STATUS = status
 
     def onThreadPoolTaskCountChange(self):
         """
@@ -85,6 +84,14 @@ class MainWindowController(QObject):
         self.logger.info(f"Client inspection {client.address} exited")
         self.deleteClientInspector(client)
 
+    def onClientRefresh(self, checked):
+        '''
+        Function that is called when the refresh connection button is clicked. Stops the connection (so the client can automatically reconnect after 5 seconds.
+        Args:
+            checked: qt passed in??
+        '''
+        self.selection.client.disconnect()
+
     def onClientInspect(self, checked):
         """
         Function that is called when the inspect button is clicked. It creates a new client inspector window for the selected client and shows it by calling createClientInspector.
@@ -106,6 +113,8 @@ class MainWindowController(QObject):
             checked: qt passed in??
         """
         self.logger.info(f"Deleting client {self.selection._address_field.text()}")
+        self.selection.client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetUninstallClient))
+        self.selection.client.disconnect()
 
     def onSelection(self, row, column):
         """
@@ -116,6 +125,19 @@ class MainWindowController(QObject):
         """
         self.logger.info(f"Selection changed to {row}")
         self.selection = list(self.clientEntries.items())[row][1] #set selection to UIClientEntry
+
+    def on_Latency_updates(self, updates: typing.Dict):
+        '''
+        Responds to the GLOBAL latencySignal and updates the given latencies for the clients.
+        Args:
+            updates: a dict{uuid:latency} specifying the latencies of each client by their uuid.
+        '''
+        for uuid in updates.keys():
+            self.clientEntries[uuid].setLatency(updates[uuid])
+            inspect_window = self.inspected_clients.get(uuid)
+            if inspect_window is not None:
+                pass
+                # TODO - create latency bar in UI
 
     def on_SystemInformation_update(self, client):
         """
