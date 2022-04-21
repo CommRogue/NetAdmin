@@ -247,5 +247,3 @@ def install_and_run():
           creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
 
     sys.exit(0)
-
-dashboard()
