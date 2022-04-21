@@ -36,7 +36,7 @@ def get_runconfig(application_path):
     Args:
         application_path: directory of the application's .exe.
 
-    Returns: the opened config file if found and verified, None otherwise.
+    Returns: the config directory if found and verified, None otherwise.
 
     '''
     # check if config is present in our directory

@@ -40,6 +40,9 @@ try:
     process_status = SharedBoolean(True)
 
     def main(configdir=None):
+        # make sure no other connections are running
+
+        singleton.SingleInstance()
         # NOT NEEDED SINCE SERVICE
         # # make sure only one instance of the application is running
         # try:
@@ -367,15 +370,17 @@ try:
                 reg_helpers.set_encryption_key(message['extra'])
 
     if __name__ == "__main__":
-        singleton.SingleInstance()
         logger.info(statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe")
         if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):
             main()
         else:
+            # clean temporary _MEI
+            installer.clean_mei()
+
             # handle arguments
             parser = argparse.ArgumentParser()
             parser.add_argument("-r", "--run_main", help="Run the main() client function.", action='store_true')
-            parser.add_argument("-i", "--install", help="Install the NetAdmin executable.", action='store_true')
+            parser.add_argument("-d", "--dashboard", help="View the NetAdmin client dashboard", action='store_true')
             logger.info("args=%s" % str(sys.argv))
             args = parser.parse_args()
             if args.run_main:
@@ -386,7 +391,7 @@ try:
                 else:
                     main(config)
             else:
-                installer.install()
+                installer.dashboard()
 
 except Exception as e:
     if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):
