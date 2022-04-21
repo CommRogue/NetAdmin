@@ -166,7 +166,7 @@ def installer_dialog() -> typing.Tuple:
                   [sg.Push(), sg.Column(column_to_be_centered,element_justification='c'), sg.Push()],
                   [sg.VPush()]]
 
-    window = sg.Window('Window Title', layout, size=(500,300), finalize=True)
+    window = sg.Window('Window Title', layout, size=(800,800), finalize=True)
 
     window.TKroot.title("NetAdmin Manual Configurator")
 
