@@ -61,9 +61,9 @@ try:
             cType = config_parser['CONNECTION']['type']
         else:
             logger.info("NO CONFIG FILE FOUND")
-            cAddress = "127.0.0.1"
+            cAddress = "netadminmain.ddns.net"
             cPort = 49152
-            cType = "ip"
+            cType = "hostname"
 
         pythoncom.CoInitialize()
         pathlib.Path(statics.PROGRAMDATA_NETADMIN_PATH).mkdir(parents=True, exist_ok=True)
@@ -81,14 +81,16 @@ try:
             try:
                 if cType.lower() == "hostname":
                     sockaddr = socket.getaddrinfo(cAddress, int(cPort))[0][4]
+                    opensockaddr = socket.getaddrinfo(cAddress, 49153)[0][4]
                 else:
                     sockaddr = (cAddress, int(cPort))
+                    opensockaddr = (cAddress, 49153)
 
                 s = SmartSocket(None, socket.AF_INET, socket.SOCK_STREAM)
                 s.connect(sockaddr)
 
                 logger.info("CONNECTED TO SERVER")
-                client_connection_main(s, computer)
+                client_connection_main(s, computer, opensockaddr)
             # if we except because of s.connect, retry connection
             #TODO if we get an error due to other exceptions, do not try to reconnect
             except (ConnectionAbortedError, ConnectionResetError, OSError) as e:
@@ -103,7 +105,7 @@ try:
                     break
 
     @helpers.try_connection
-    def client_connection_main(s, computer):
+    def client_connection_main(s, computer, opensockaddr):
         # main loop
         # receives and unpacks messages from the server, and checks the type of message
         while process_status:
@@ -272,7 +274,7 @@ try:
                     else:
                         Fkey = None
                     sock = SmartSocket(None, socket.AF_INET, socket.SOCK_STREAM)
-                    sock.connect((s.getsockname()[0], 49153))
+                    sock.connect(opensockaddr)
                     sock.send_message(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value), id=id))
                     sock.send_appended_stream(s.fernetInstance.encrypt(orjson.dumps(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value), id=id))))
                     if Fkey:
