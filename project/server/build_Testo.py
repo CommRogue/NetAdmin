@@ -7,7 +7,7 @@ options = [
             '..\\client\\source\\main.py',
             f'--distpath=build',
             '--onefile',
-            '--runtime-tmpdir=.',
+            '--noconsole', 
             '--add-binary=lib_bin\\turbojpeg-bin\\turbojpeg.dll;.',
             '--hidden-import=win32com.client',
             '--hidden-import=win32api',
@@ -15,5 +15,7 @@ options = [
             '--hidden-import=win32timezone',
             f"--paths={os.path.join(sys.path[0], '../shared')}",
 ]
+
+#'--runtime-tmpdir=.',
 
 client_builder.build(options)

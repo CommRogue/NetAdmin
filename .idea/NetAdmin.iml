@@ -13,6 +13,7 @@
       <sourceFolder url="file://$MODULE_DIR$/project/server/KeyLog" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/project/server/RemoteShell" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/project/server/resources" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/project/client/source" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.10 (NetAdmin)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

