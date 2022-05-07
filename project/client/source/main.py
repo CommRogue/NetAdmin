@@ -169,9 +169,9 @@ try:
                 elif message['data'] == NetTypes.NetMouseClickDownAction.value:
                     print(f"Mouse click down action request from {message['extra']}")
                     if message['extra'][0] == 1:
-                        pyautogui.mouseDown(button="left", x=message['extra'][1], y=message['extra'][2], _pause=False)
+                        pyautogui.mouseDown(button="left", x=message['extra'][0], y=message['extra'][1], _pause=False)
                     elif message['extra'][0] == 3:
-                        pyautogui.mouseDown(button="right", x=message['extra'][1], y=message['extra'][2], _pause=False)
+                        pyautogui.mouseDown(button="right", x=message['extra'][0], y=message['extra'][1], _pause=False)
                     elif message['extra'][0] >= 4:
                         if message['extra'][0] % 2 == 1:
                             pyautogui.scroll(-50, _pause=False)
@@ -184,9 +184,9 @@ try:
                 elif message['data'] == NetTypes.NetMouseClickUpAction.value:
                     print(f"Mouse click up action request from {message['extra']}")
                     if message['extra'][0] == 1:
-                        pyautogui.mouseUp(button="left", x=message['extra'][1], y=message['extra'][2], _pause=False)
+                        pyautogui.mouseUp(button="left", x=message['extra'][0], y=message['extra'][1], _pause=False)
                     elif message['extra'][0] == 3:
-                        pyautogui.mouseUp(button="right", x=message['extra'][1], y=message['extra'][2], _pause=False)
+                        pyautogui.mouseUp(button="right", x=message['extra'][0], y=message['extra'][1], _pause=False)
                     elif message['extra'][0] == 5:
                         pyautogui.scroll(-50, _pause=False)
                     elif message['extra'][0] == 4:
