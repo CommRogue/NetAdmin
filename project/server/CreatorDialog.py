@@ -339,6 +339,7 @@ class CreatorDialog(QDialog):
         options = [
             '..\\client\\main.py',
             f'--distpath={os.path.join(outputDir, "build")}',
+            f'--additional-hooks-dir=PyInstaller_hooks',
             '--onefile',
             '--runtime-tmpdir=.',
             '--add-binary=lib_bin\\turbojpeg-bin\\turbojpeg.dll;.',

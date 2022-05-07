@@ -32,8 +32,11 @@ def clean_mei(): # use only after checking for frozen
                 fullDirName = tempDirPath+"\\"+dir
                 if fullDirName != currentDirPath:
                     ctime = os.path.getctime(fullDirName)
-                    if time.time() - ctime > 1: # check if folder is older than 24 hours
-                        shutil.rmtree(fullDirName)
+                    if time.time() - ctime > 640: # check if folder is older than 24 hours
+                        try:
+                            shutil.rmtree(fullDirName)
+                        except:
+                            logger.info(f"Tried to delete {fullDirName}, but encountered exception, likely due to folder still being used by open NetAdmin instance. ")
 
 
 def input_installation(path):

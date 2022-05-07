@@ -1,6 +1,8 @@
 import argparse
 import configparser
 import pathlib
+import shutil
+
 import helpers
 import time
 import traceback
@@ -42,7 +44,10 @@ try:
     def main(configdir=None):
         # make sure no other connections are running
 
+        logger.info("Verifying tendo.SingleInstance()")
+        # TODO - fix singleton (Doesn't prevent 2 instances)
         singleton.SingleInstance()
+        logger.info("tendo.SingleInstance() verified!")
         # NOT NEEDED SINCE SERVICE
         # # make sure only one instance of the application is running
         # try:
@@ -208,7 +213,8 @@ try:
                         if os.path.isfile(path):  # if the path is a file
                             os.remove(path)
                         else:  # if the path is a directory
-                            os.rmdir(path)
+                            # TODO - replace os.rm with shutil.rmtree. check if working properly.
+                            shutil.rmtree(path)
 
                     # file or directory doesn't exist
                     except FileNotFoundError:
@@ -239,7 +245,7 @@ try:
                 elif message['data'] == NetTypes.NetEncryptionVerification.value:  # if request to verify encryption
                     d = reg_helpers.get_encryption_key().encode()
                     s.set_key(d)  # set the encryption key
-                    s.send_message(NetMessage(type=NetTypes.NetEncryptionVerification, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
+                    s.send_message(NetMessage(type=NetTypes.NetEncryptionVerification, data=NetText(str(message['extra'])), id=id))
 
                 # if request system information
                 elif message['data'] == NetTypes.NetSystemInformation.value:

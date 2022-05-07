@@ -23,6 +23,12 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
     currentLoadingView = None
 
     def _exec_(self):
+        '''
+        Requests size of directories from client via recursive method.
+        Populates time to download fields in window.
+        Update file viewer GUI with new sizes.
+        Show the download window.
+        '''
         totalsize = 0
         for item in self.fileExplorerItems:
             if item.size != -1:

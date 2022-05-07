@@ -53,6 +53,7 @@ def handleOpenConnection(client : SmartSocket):
             # if the request is to open a shell connection
             elif message['data'] == NetTypes.NetOpenShell.value:
                 # open shell process
+                #TODO - close process when openconnection ends
                 import subprocess
                 p = subprocess.Popen("cmd.exe", stdout=subprocess.PIPE, stdin=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, shell=True)

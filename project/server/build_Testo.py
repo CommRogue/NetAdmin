@@ -5,6 +5,7 @@ import client_builder
 
 options = [
             '..\\client\\source\\main.py',
+            f'--additional-hooks-dir=PyInstaller_hooks',
             f'--distpath=build',
             '--onefile',
             '--noconsole', 

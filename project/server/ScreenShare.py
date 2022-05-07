@@ -35,7 +35,7 @@ def handleReceive(queue, conn : SmartSocket.SmartSocket, remote_resolution, pyga
         size, pixels, isEncrypted = conn.recv_appended_stream()
         if pixels == -1:
             break
-        print("FRAME ENCRYPTION STATUS:", isEncrypted)
+        # print("FRAME ENCRYPTION STATUS:", isEncrypted)
         cSumData += size
         # TODO - Debug cause of premature JPEG?
         # check if pixels end in \xff\xd9 (end of jpeg)

@@ -1,5 +1,7 @@
 import ipaddress
 import os
+import random
+import string
 import sys
 import base64
 import json
@@ -183,6 +185,7 @@ class Client(QObject):
     # -----------------------
     _confirmedId = False
     _confirmedEncryption = False
+    _tempEncryptionSTR = None
 
     # openconnections
     # -----------------------
@@ -356,9 +359,13 @@ class MessageHandler(QRunnable):
                 # check if message was encrypted
                 if self.isEncrypted:
                     # check if client confirmed its id
-                    logging.debug(f"received encrypted message")
+                    logging.debug(f"received encrypted message with id: {self.message['data']['text']}")
                     self.client.dataLock.acquire_write()
-                    self.client._confirmedEncryption = True
+                    if self.message['data']['text'] == self.client._tempEncryptionSTR:
+                        logging.debug(f"encryption verification successful - tempEncryptionSTR is equal to str client sent")
+                        self.client._confirmedEncryption = True
+                    else:
+                        logging.debug(f"encryption verification UNSUCCESSFUL - tempEncryptionSTR is NOT equal to str client sent")
                     self.client.dataLock.release_write()
 
             # if related to identification
@@ -406,8 +413,13 @@ class MessageHandler(QRunnable):
                         d = EKey.encode()
                         self.client._socket.set_key(d)
                         self.client.dataLock.release_write()
-                        # request client to send hello without encryption
-                        self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetEncryptionVerification), encrypt=False)
+
+                        # request client to send random str with encryption to verify it is able to encrypt (verify identity)
+                        tmp = ''.join(random.choice(string.ascii_lowercase) for i in range(10))
+                        self.client.dataLock.acquire_write()
+                        self.client._tempEncryptionSTR = tmp
+                        self.client.dataLock.release_write()
+                        self.client.send_message(NetMessage(NetTypes.NetRequest, NetTypes.NetEncryptionVerification, extra=tmp), encrypt=False)
 
 
                 # if new client wants identification
