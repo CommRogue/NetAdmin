@@ -101,14 +101,14 @@ def main(client):
                             mouse_pos = (round(pg_mouse_pos[0] * x_diff_multiplier, 1),
                                          round(pg_mouse_pos[1] * y_diff_multiplier, 1))
                             client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickDownAction,
-                                                           extra=mouse_pos))
+                                                           extra=(event.button, *mouse_pos)))
                         if event.type == pygame.MOUSEBUTTONUP:
                             pg_mouse_pos = pygame.mouse.get_pos()
                             # multiply by localres -> remoteres multiplier
                             mouse_pos = (round(pg_mouse_pos[0] * x_diff_multiplier, 1),
                                          round(pg_mouse_pos[1] * y_diff_multiplier, 1))
                             client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickUpAction,
-                                                           extra=mouse_pos))
+                                                           extra=(event.button, *mouse_pos)))
                     clock.tick(60)
                     # size = conn.recv(4)
                     # size = int.from_bytes(size, byteorder='big')
