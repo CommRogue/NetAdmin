@@ -351,11 +351,12 @@ class MessageHandler(QRunnable):
 
         self.client.dataLock.acquire_read()
         isVerified = (self.client._confirmedId and self.client._confirmedEncryption)
+        isConfirmedID = self.client._confirmedId
         self.client.dataLock.release_read()
 
         if not isVerified:
             # if related to encryption
-            if self.message["type"] == NetTypes.NetEncryptionVerification.value:
+            if self.message["type"] == NetTypes.NetEncryptionVerification.value and isConfirmedID:
                 # check if message was encrypted
                 if self.isEncrypted:
                     # check if client confirmed its id
@@ -699,7 +700,7 @@ class ListenerWorker(QObject):
                     threadPool.start(ClientConnectionHandler(clients[connection], self.controller.sThreadPool_runningTaskCountChanged))
 
                 elif s is self.openconnection_listener_socket:
-                    # new OpenConnection
+                    # new OpenConnection, we don't add to select.select's list since it is seperate from this thread
                     connection, client_address = s.accept()
                     logging.debug(f"{client_address} new OpenConnection")
                     threadPool.start(NewOpenConnectionHandler(connection, self.controller.sThreadPool_runningTaskCountChanged))

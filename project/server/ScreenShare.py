@@ -24,7 +24,7 @@ def recvall(conn, length):
         buf += data
     return buf
 
-def handleReceive(queue, conn : SmartSocket.SmartSocket, remote_resolution, pygame_resolution):
+def handleReceive(queue, conn : SmartSocket.SmartSocket, remote_resolution):
     i = 0
     cSumData = 0
     while True:
@@ -42,7 +42,6 @@ def handleReceive(queue, conn : SmartSocket.SmartSocket, remote_resolution, pyga
         if pixels[-2:] == b"\xff\xd9":
             pixels = jpeg.decode(pixels)
             img = pygame.image.frombuffer(pixels, remote_resolution, 'RGB')
-            img = pygame.transform.smoothscale(img, pygame_resolution)
             queue.put(img)
             i += 1
         else:
@@ -67,16 +66,18 @@ def main(client):
             x_diff_multiplier = (remote_resolution[0]/pygame_resolution[0])
             y_diff_multiplier = (remote_resolution[1]/pygame_resolution[1])
             pygame.init()
-            window = pygame.display.set_mode(pygame_resolution)
+            window = pygame.display.set_mode(pygame_resolution, flags=pygame.RESIZABLE)
             imgqueue = queue.Queue()
-            event_thread = threading.Thread(target=handleReceive, args=(imgqueue, conn, remote_resolution, pygame_resolution,))
+            event_thread = threading.Thread(target=handleReceive, args=(imgqueue, conn, remote_resolution,))
             event_thread.start()
             clock = pygame.time.Clock()
             try:
                 while True:
                     # check if queue is empty
                     if not imgqueue.empty():
-                        window.blit(imgqueue.get_nowait(), (0, 0))
+                        img = imgqueue.get_nowait()
+                        img = pygame.transform.smoothscale(img, pygame_resolution)
+                        window.blit(img, (0, 0))
                         pygame.display.flip()
                     # handle input
                     for event in pygame.event.get():
@@ -109,6 +110,11 @@ def main(client):
                                          round(pg_mouse_pos[1] * y_diff_multiplier, 1))
                             client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetMouseClickUpAction,
                                                            extra=(event.button, *mouse_pos)))
+                        if event.type == pygame.VIDEORESIZE:
+                            pygame_resolution = (event.w, event.h)
+                            x_diff_multiplier = (remote_resolution[0] / pygame_resolution[0])
+                            y_diff_multiplier = (remote_resolution[1] / pygame_resolution[1])
+
                     clock.tick(60)
                     # size = conn.recv(4)
                     # size = int.from_bytes(size, byteorder='big')
