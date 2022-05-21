@@ -1,4 +1,3 @@
-import FileExplorer
 import OpenConnectionHelpers
 import main
 import screenshare
@@ -70,7 +69,10 @@ def handleOpenConnection(client : SmartSocket):
                 directory = message['extra']
 
                 # send all files
-                OpenConnectionHelpers.sendallfiles(client, directory)
+                OpenConnectionHelpers.client_to_server_sendallfiles(client, directory)
 
                 # send file download end status
                 client.send_message(NetMessage(NetTypes.NetStatus.value, NetStatus(NetStatusTypes.NetDownloadFinished.value)))
+
+            elif message['data'] == NetTypes.NetStartUpload.value:
+                OpenConnectionHelpers.receivefiles_server_to_client(client)

@@ -84,7 +84,87 @@ def forward_upnp(port):
             forwarded = True
     return forwarded
 
-def sendfile(directory, socket : SmartSocket.SmartSocket):
+class update_signal_emitter:
+    def __init__(self, update_signal, update_chunk_size):
+        self.bytes_sent_until_chunk = 0
+        self.update_signal = update_signal
+        self.update_chunk = update_chunk_size
+
+    def report_send(self, bytes_sent):
+        self.bytes_sent_until_chunk += bytes_sent
+        if self.bytes_sent_until_chunk >= self.update_chunk:
+            self.update_signal.emit("bytes_sent", self.bytes_sent_until_chunk)
+            self.bytes_sent_until_chunk = 0
+
+    def report_excluded_link(self):
+        self.update_signal.emit("excluded_link", None)
+
+    def report_excluded_accessdenied(self):
+        self.update_signal.emit("excluded_accessdenied", None)
+
+    def report_finished_upload(self):
+        self.update_signal.emit("finished_upload", None)
+
+    def report_upload_failed(self):
+        self.update_signal.emit("upload_failed", None)
+
+def server_to_client_sendfile(base_dir, directory, socket : SmartSocket.SmartSocket, update_emitter, remote_dir):
+    try:
+        file = open(directory, 'rb')
+    except:
+        update_emitter.report_excluded_accessdenied()
+    else:
+        # get file size
+        size = os.path.getsize(directory)
+        # get file name from directory
+        name = os.path.basename(directory)
+        # send file descriptor
+        socket.send_message(
+            NetMessage(type=NetTypes.NetDownloadFileDescriptor.value, data=NetDownloadFileDescriptor(resolveRemoteDirectoryToLocal(base_dir, directory, remote_dir), size)))
+
+        # read file and send exactly maximum of 16KB at a time.
+        # the receiver receives exactly 16KB, or the remainder of the file (which it can calculate using the file size and amount of bytes received)
+        # then the receiver decrypts exactly that amount of data
+        buffer = file.read(16000)
+        while buffer:
+            if socket.Fkey:
+                print("Encrypted 16KB chunk or file remainder of data on NetTransferProtocol")
+            socket.send_appended_stream(buffer)
+            if update_emitter:
+                update_emitter.report_send(len(buffer))
+            buffer = file.read(16000)
+        file.close()
+
+def server_to_client_sendallfiles(socket, base_dir, dir, update_emitter: update_signal_emitter, remote_dir):
+    try:
+        if socket.fileno() == -1:
+            raise ConnectionResetError("Socket is closed")
+        if os.path.islink(dir):
+            update_emitter.report_excluded_link()
+            return
+        if os.path.isfile(dir):
+            server_to_client_sendfile(base_dir, dir, socket, update_emitter, remote_dir)
+        else:
+            try:
+                scan = os.scandir(dir)
+                # check if there are any items in the iterator
+                if any(True for _ in scan):
+                    for item in os.scandir(dir):
+                        print(item)
+                        result = server_to_client_sendallfiles(socket, base_dir, os.path.join(dir, item.name), update_emitter, remote_dir)
+                        if result == -1:
+                            return -1
+                else:
+                    socket.send_message(
+                        NetMessage(type=NetTypes.NetDownloadDirectoryDescriptor.value,
+                                   data=NetDownloadDirectoryDescriptor(resolveRemoteDirectoryToLocal(base_dir, dir, remote_dir))))
+            except PermissionError:
+                update_emitter.report_excluded_accessdenied()
+    except (ConnectionResetError, OSError, ConnectionAbortedError):
+        print("Connection reset on SERVER server_to_client_sendallfiles")
+        return -1
+
+def client_to_server_sendfile(directory, socket : SmartSocket.SmartSocket):
     try:
         file = open(directory, 'rb')
     except:
@@ -110,21 +190,21 @@ def sendfile(directory, socket : SmartSocket.SmartSocket):
             buffer = file.read(16000)
         file.close()
 
-def sendallfiles(socket, dir) -> None:
+def client_to_server_sendallfiles(socket, dir) -> None:
     try:
         if socket.fileno() == -1:
             raise ConnectionResetError("Socket is closed")
         if os.path.islink(dir):
             return
         if os.path.isfile(dir):
-            sendfile(dir, socket)
+            client_to_server_sendfile(dir, socket)
         else:
             try:
                 scan = os.scandir(dir)
                 # check if there are any items in the iterator
                 if any(True for _ in scan):
                     for item in os.scandir(dir):
-                        sendallfiles(socket, os.path.join(dir, item.name))
+                        client_to_server_sendallfiles(socket, os.path.join(dir, item.name))
                 else:
                     socket.send_message(
                         NetMessage(type=NetTypes.NetDownloadDirectoryDescriptor.value,
@@ -134,7 +214,7 @@ def sendallfiles(socket, dir) -> None:
                     NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetDirectoryAccessDenied.value),
                                extra=dir))
     except ConnectionResetError:
-        print("Connection reset")
+        print("Connection reset on SERVER client_to_server_sendallfiles")
 
 def resolveRemoteDirectoryToLocal(base_remote_directory, actual_remote_directory, local_directory) -> str:
     # get the relative path from the directory that the user chose to the directory that the file is in
@@ -142,6 +222,53 @@ def resolveRemoteDirectoryToLocal(base_remote_directory, actual_remote_directory
 
     # combine the relative path with the local directory that the user chose
     return  os.path.join(local_directory, relative_path)
+
+def receivefiles_server_to_client(sock : SmartSocket.SmartSocket):
+    try:
+        while True:
+            size, response, _ = sock.receive_message()
+            if size == -1:
+                break
+            if response['type'] == NetTypes.NetRequest.value:
+                if response['data'] == NetTypes.NetEndUpload.value:
+                    print("File upload successful")
+                    sock.send_message(NetMessage(type=NetTypes.NetStatus.value, data=NetStatus(NetStatusTypes.NetOK.value)))
+                    break
+            elif response['type'] == NetTypes.NetDownloadFileDescriptor.value:
+                # get size and name
+                file_size = response['data']['size']
+                path = response['data']['directory']
+
+                # verify if the directory that the file exists in exists
+                if not verify_dir(os.path.dirname(path)):
+                    logging.info(f"Directory {path} didn't exist. Created it.")
+                bytes_received = 0
+                # open file
+                with open(path, 'wb+') as f:
+                    # read file data in chunks of 1024 bytes
+                    while bytes_received < file_size:
+                        # receive data from server (size appended to 16KB chunks of data because of AES enlargement of bytes.). if the remaining bytes in the buffer are less than 1024, read the remaining bytes
+                        # data = socket.recv_exact(min(16384, file_size - bytes_received), decrypt_if_available=True)
+                        size, data, isEncrypted = sock.recv_appended_stream()
+                        if size == -1:
+                            break
+                        if not data:
+                            break
+                        print(f"NetFileTransfer:receivefiles_server_to_client received file chunk: {len(data)} bytes")
+                        f.write(data)
+                        bytes_received += len(data)
+                        # if we received all the bytes, then finished file download
+                        if bytes_received == file_size:
+                            logging.info("Finished downloading file.")
+                            # download_progress_signal.emit(bytes_to_signal-tbs)
+                            break
+            elif response['type'] == NetTypes.NetDownloadDirectoryDescriptor.value:
+                path = response['data']['directory']
+                verify_dir(path)
+
+
+    except ConnectionResetError:
+        print("Connection reset on CLIENT receivefiles_server_to_client")
 
 def receivefiles(socket : SmartSocket.SmartSocket, base_remote_dir, local_dir, status_queue, download_progress_signal=None, overall_size=None) -> tuple[
     bool, int, list[str]]:
@@ -251,7 +378,7 @@ def _copy_socket(originalSocket : SmartSocket.SmartSocket):
         key = originalSocket.Fkey
     return SmartSocket.SmartSocket(key, socket.AF_INET, socket.SOCK_STREAM)
 
-def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.SmartSocket], encrypt=True):
+def open_connection(client : typing.Union[MWindowModel.Client, SmartSocket.SmartSocket], encrypt=True) -> SmartSocket.SmartSocket:
     """
     Opens a new socket to the client or socket passed in.
     Args:

@@ -27,6 +27,12 @@ def bytesToStr(size : int) -> str:
 
 class FileExplorerItem(QTreeWidgetItem):
     def __init__(self, path, collapsable, strings, size=None, parent=None, styling=None, readable=False):
+        # fields
+        # - path
+        # - size
+        # - readable (if permissions)
+        # - showContextMenu (if size partially available)
+        # - collpsable (true if folder, false if file)
         self.size = size
         self.readable = readable
         self.showContextMenu = False

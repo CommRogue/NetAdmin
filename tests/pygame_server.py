@@ -1,9 +1,6 @@
-import ctypes
-import sys
-import winreg, logging, statics
-import reg_helpers
-import helpers
-import ctypes
+import os
 
-logger = logging.getLogger("mainlogger")
+scan = os.scandir('D:\\techem\\blyat_folder')
 
+for item in scan:
+    print(item)

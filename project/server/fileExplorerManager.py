@@ -2,7 +2,8 @@ from PyQt5 import QtCore
 from PyQt5.QtCore import *
 from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import QPushButton, QMenu
-
+from UploadController import UploadDialogController
+from UploadModel import UploadDialogModel
 import GUIHelpers
 import InspectionWindowView
 from DUDialogController import DUDialogController
@@ -120,6 +121,7 @@ class FileExplorerManager(QObject):
         self.view.fileViewer.itemSelectionChanged.connect(self.fileViewerSelectionChanged)
         self.view.deleteButton.clicked.connect(self.fileViewerDeleteButtonClicked)
         self.view.downloadButton.clicked.connect(self.fileViewerDownloadButtonClicked)
+        self.view.pushButton.clicked.connect(self.fileViewerUploadButtonClicked)
         self.view.fileViewer.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.fileViewer.customContextMenuRequested.connect(self.customContextMenuRequested)
         self.selections = None
@@ -259,12 +261,42 @@ class FileExplorerManager(QObject):
                 sum += 1
         return sum
 
+    def fileViewerUploadButtonClicked(self):
+        if not self.selections:
+            return
+
+        if not len(self.selections) == 1:
+            GUIHelpers.infobox("Upload Selection Error",
+                               f"There are currently {len(self.selections)} items selected.\nPlease select a single directory to download to.")
+            return
+        selection = self.selections[0]
+
+        if not selection.collapsable:
+            GUIHelpers.infobox("Upload Selection Error",
+                               "The currently selected item is a file, not a directory. \nPlease choose a directory to upload to. ")
+            return
+
+        if not selection.readable:
+            GUIHelpers.infobox("Upload Selection Error",
+                               "The currently selected folder is inaccessible. \nPlease choose a different folder to upload to. ")
+            return
+
+        UploadController = UploadDialogController(selection, self)
+        UploadView = DUDialog.UploadDialog(UploadController)
+        UploadModel = UploadDialogModel(UploadController, self.client)
+        UploadController.set_view(UploadView)
+        UploadController.set_model(UploadModel)
+
+        self.DUDialogControllers.append(UploadController)
+
+        UploadView.show()
+
     def fileViewerDownloadButtonClicked(self):
         if self.selections:
             not_downloadable = self.checkDownloadable(self.selections)
             # check if all selections are downloadable
             if not_downloadable == 0:
-                DUController = DUDialogController(self.selections)
+                DUController = DUDialogController(self.selections, self)
                 DUView = DUDialog.DownloadDialog(DUController)
                 DUModel = DUDialogModel(DUController, self.client)
                 # connect the view and the model to the controller

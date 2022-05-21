@@ -333,11 +333,13 @@ class CreatorDialog(QDialog):
                 pass
             finally:
                 QApplication.instance().processEvents()
+        # remove the logging handler previously added
+        logging.getLogger().removeHandler(outputRedirector)
 
     # TODO - make port in config file for server application, add port automatically in this function
     def build(self, outputDir, outputRedirector, type, ip_or_hostname=None, port=PORT):
         options = [
-            '..\\client\\main.py',
+            '..\\client\\source\\main.py',
             f'--distpath={os.path.join(outputDir, "build")}',
             f'--additional-hooks-dir=PyInstaller_hooks',
             '--onefile',

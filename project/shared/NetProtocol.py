@@ -37,6 +37,8 @@ class NetTypes(Enum):
     NetEncryptionVerification = 25
     NetHeartbeat = 26
     NetUninstallClient = 27
+    NetStartUpload = 28
+    NetEndUpload = 29
 
 class NetStatusTypes(Enum):
     NetOK = 0

@@ -75,8 +75,9 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
         # start the generator
         next(self._execObj)
 
-    def __init__(self, fileExplorerItems, view=None, model=None):
+    def __init__(self, fileExplorerItems, fileExplorerManager, view=None, model=None):
         QObject.__init__(self)
+        self.fileExplorerManager = fileExplorerManager
         self.fileExplorerItems = fileExplorerItems
         self.totalSize = 0
         self.downloading = False
@@ -157,6 +158,7 @@ class DUDialogController(QObject, GUIHelpers.MVCModel):
     def closeButtonClicked(self):
         self.model.cancel_download()
         self.view.close()
+        self.fileExplorerManager.DUDialogControllers.remove(self)
 
     def on_downloadbutton_clicked(self):
         """

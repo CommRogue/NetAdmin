@@ -294,6 +294,7 @@ class DatabaseHelpers:
         else:
             return None
 
+    #TODO - check if connected client's ip is the same as last stored, else change
     @staticmethod
     def insert_client(database : QSqlDatabase, uuid : str, address : str, ekey : str):
         logging.debug(f"Inserting client {uuid} at {address} with encryption key {ekey}")
