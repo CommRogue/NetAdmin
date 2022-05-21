@@ -10,6 +10,7 @@ import threading
 import socket
 import time
 import fernet
+import pyperclip
 import select
 import queue
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, QRunnable, QThreadPool
@@ -478,6 +479,10 @@ class MessageHandler(QRunnable):
                 data = self.message["data"]
                 dataStructure = NetDirectorySize(**data)
                 eventAttachedData = dataStructure
+
+            elif self.message["type"] == NetTypes.NetCopyText.value:
+                text = self.message['data']['text']
+                pyperclip.copy(text)
 
             # if related to response to text request
             elif self.message["type"] == NetTypes.NetText.value:

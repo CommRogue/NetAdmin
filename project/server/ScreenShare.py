@@ -3,6 +3,7 @@ import ctypes
 import queue
 import threading
 import pygame
+import pyperclip
 
 import SmartSocket
 from NetProtocol import *
@@ -87,9 +88,15 @@ def main(client):
                             return
                         if event.type == pygame.KEYDOWN:
                             print(f"Key pressed: {keys[event.key]}")
-                            client.send_message(
-                                NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetKeyboardAction,
-                                           extra=keys[event.key][2:]))
+                            if keys[event.key] != "K_ESCAPE":
+                                if (keys[event.key] == "K_v" or keys[event.key] == "K_V") and pygame.key.get_mods() & pygame.KMOD_CTRL: # paste
+                                    client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetPasteText, extra=pyperclip.paste()))
+                                elif (keys[event.key] == "K_c" or keys[event.key] == "K_C") and pygame.key.get_mods() & pygame.KMOD_CTRL: # copy
+                                    client.send_message(NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetCopyText))
+                                else:
+                                    client.send_message(
+                                        NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetKeyboardAction,
+                                                   extra=keys[event.key][2:]))
                         if event.type == pygame.MOUSEMOTION:
                             pg_mouse_pos = pygame.mouse.get_pos()
                             # multiply by localres -> remoteres multiplier

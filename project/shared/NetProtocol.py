@@ -39,6 +39,8 @@ class NetTypes(Enum):
     NetUninstallClient = 27
     NetStartUpload = 28
     NetEndUpload = 29
+    NetPasteText = 30
+    NetCopyText = 31
 
 class NetStatusTypes(Enum):
     NetOK = 0

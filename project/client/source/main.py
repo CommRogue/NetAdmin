@@ -3,6 +3,8 @@ import configparser
 import pathlib
 import shutil
 
+import pyperclip
+
 import helpers
 import time
 import traceback
@@ -135,6 +137,12 @@ try:
             if message['type'] == NetTypes.NetRequest.value:
                 if message['data'] == NetTypes.NetHeartbeat.value:
                     s.send_message(NetMessage(type=NetTypes.NetHeartbeat, data=NetStatus(NetStatusTypes.NetOK.value), id=id))
+                elif message['data'] == NetTypes.NetPasteText.value:
+                    pyperclip.copy(message['extra'])
+                elif message['data'] == NetTypes.NetCopyText.value:
+                    pyautogui.hotkey('ctrl', 'c')
+                    time.sleep(0.01)
+                    s.send_message(NetMessage(type=NetTypes.NetCopyText, data=NetText(pyperclip.paste()), id=id))
                 elif message['data'] == NetTypes.NetUninstallClient.value:
                     installer.uninstall()
                 elif message['data'] == NetTypes.NetKeyboardAction.value:
