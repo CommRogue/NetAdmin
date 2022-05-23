@@ -97,6 +97,10 @@ def main(client):
                                     client.send_message(
                                         NetMessage(type=NetTypes.NetRequest, data=NetTypes.NetKeyboardAction,
                                                    extra=keys[event.key][2:]))
+                            else:
+                                pygame.quit()
+                                conn.close()
+                                return
                         if event.type == pygame.MOUSEMOTION:
                             pg_mouse_pos = pygame.mouse.get_pos()
                             # multiply by localres -> remoteres multiplier

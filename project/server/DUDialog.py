@@ -12,9 +12,6 @@ class DUDialog(QtWidgets.QDialog):
 
 
 class DownloadDialog(DUDialog):
-    def reject(self):
-        self.controller.closeButtonClicked()
-
     def custom(self):
         b1 = self.buttonBox.addButton("Start Download", QtWidgets.QDialogButtonBox.YesRole)
         b1.clicked.connect(self.controller.on_downloadbutton_clicked)
